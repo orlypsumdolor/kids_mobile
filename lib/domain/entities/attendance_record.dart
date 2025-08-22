@@ -45,7 +45,7 @@ class AttendanceRecord extends Equatable {
   String get volunteerId => checkedInBy;
   DateTime get checkinTime => checkInTime;
   DateTime? get checkoutTime => checkOutTime;
-  bool get isSynced => true; // Always synced when coming from API
+
 
   @override
   List<Object?> get props => [

@@ -1,5 +1,6 @@
 import '../entities/child.dart';
 import '../entities/checkin_session.dart';
+import '../entities/attendance_record.dart';
 import '../repositories/checkin_repository.dart';
 
 class GetChildByCodeUseCase {
@@ -21,7 +22,7 @@ class CheckInChildUseCase {
 
   CheckInChildUseCase(this._repository);
 
-  Future<CheckInSession> call(
+  Future<AttendanceRecord> call(
       String childId, String volunteerId, String serviceSession) {
     return _repository.checkInChild(childId, volunteerId, serviceSession);
   }

@@ -7,6 +7,7 @@ import '../../widgets/child_info_card.dart';
 import '../../widgets/service_selector.dart';
 import '../../widgets/scan_method_selector.dart';
 import '../../../core/router/app_router.dart';
+import 'package:flutter/foundation.dart';
 
 class CheckinPage extends StatefulWidget {
   const CheckinPage({super.key});
@@ -30,13 +31,14 @@ class _CheckinPageState extends State<CheckinPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: const Text('Check-In'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -78,9 +80,9 @@ class _CheckinPageState extends State<CheckinPage> {
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.error_outline,
-                              color: Theme.of(context).colorScheme.error,
+                              color: Color.fromARGB(255, 218, 69, 59),
                               size: 48,
                             ),
                             const SizedBox(height: 8),
@@ -90,21 +92,61 @@ class _CheckinPageState extends State<CheckinPage> {
                                   .textTheme
                                   .titleMedium
                                   ?.copyWith(
-                                    color: Theme.of(context).colorScheme.error,
+                                    color:
+                                        const Color.fromARGB(255, 218, 69, 59),
                                   ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               provider.error!,
                               textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
+                              style: const TextStyle(
+                                color: Color.fromARGB(255, 218, 69, 59),
                               ),
                             ),
                             const SizedBox(height: 16),
                             ElevatedButton(
                               onPressed: () => provider.clearScannedChild(),
                               child: const Text('Try Again'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (provider.successMessage != null) {
+                    return Card(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .secondary
+                          .withOpacity(0.1),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            const Icon(
+                              Icons.check_circle_outline,
+                              color: Colors.green,
+                              size: 48,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Success!',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(color: Colors.green),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              provider.successMessage!,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () => provider.clearScannedChild(),
+                              child: const Text('Check In Another Child'),
                             ),
                           ],
                         ),
@@ -122,7 +164,8 @@ class _CheckinPageState extends State<CheckinPage> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor:
                                 Theme.of(context).colorScheme.secondary,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 16, horizontal: 20),
                           ),
                           child: const Text(
                             'Check In Child',
@@ -135,48 +178,6 @@ class _CheckinPageState extends State<CheckinPage> {
                           child: const Text('Scan Different Child'),
                         ),
                       ],
-                    );
-                  }
-
-                  if (provider.successMessage != null) {
-                    return Card(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .secondary
-                          .withOpacity(0.1),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.check_circle_outline,
-                              color: Theme.of(context).colorScheme.secondary,
-                              size: 48,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Success!',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    color:
-                                        Theme.of(context).colorScheme.secondary,
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              provider.successMessage!,
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: () => provider.clearScannedChild(),
-                              child: const Text('Check In Another Child'),
-                            ),
-                          ],
-                        ),
-                      ),
                     );
                   }
 

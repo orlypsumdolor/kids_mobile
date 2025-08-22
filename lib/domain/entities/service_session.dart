@@ -33,45 +33,57 @@ class ServiceSession extends Equatable {
 
   bool get isCurrentlyActive {
     if (!isActive) return false;
-    
+
     final now = DateTime.now();
     final today = now.weekday == 7 ? 'sunday' : _getDayName(now.weekday);
-    
+
     if (today != dayOfWeek) return false;
-    
+
     // Parse time strings to compare with current time
     final startParts = startTime.split(':').map(int.parse).toList();
     final endParts = endTime.split(':').map(int.parse).toList();
-    
+
+    if (startParts.length < 2 || endParts.length < 2) return false;
+
     final startMinutes = startParts[0] * 60 + startParts[1];
     final endMinutes = endParts[0] * 60 + endParts[1];
     final currentMinutes = now.hour * 60 + now.minute;
-    
+
     return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
   }
 
   int? get duration {
     if (startTime.isEmpty || endTime.isEmpty) return null;
-    
+
     final startParts = startTime.split(':').map(int.parse).toList();
     final endParts = endTime.split(':').map(int.parse).toList();
-    
+
+    if (startParts.length < 2 || endParts.length < 2) return null;
+
     final startMinutes = startParts[0] * 60 + startParts[1];
     final endMinutes = endParts[0] * 60 + endParts[1];
-    
+
     return endMinutes - startMinutes;
   }
 
   String _getDayName(int weekday) {
     switch (weekday) {
-      case 1: return 'monday';
-      case 2: return 'tuesday';
-      case 3: return 'wednesday';
-      case 4: return 'thursday';
-      case 5: return 'friday';
-      case 6: return 'saturday';
-      case 7: return 'sunday';
-      default: return 'sunday';
+      case 1:
+        return 'monday';
+      case 2:
+        return 'tuesday';
+      case 3:
+        return 'wednesday';
+      case 4:
+        return 'thursday';
+      case 5:
+        return 'friday';
+      case 6:
+        return 'saturday';
+      case 7:
+        return 'sunday';
+      default:
+        return 'sunday';
     }
   }
 

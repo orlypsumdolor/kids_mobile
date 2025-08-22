@@ -24,7 +24,9 @@ class ChildInfoCard extends StatelessWidget {
                   backgroundColor: Theme.of(context).colorScheme.primary,
                   radius: 30,
                   child: Text(
-                    child.firstName[0].toUpperCase(),
+                    child.firstName.isNotEmpty
+                        ? child.firstName[0].toUpperCase()
+                        : '?',
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -95,6 +97,7 @@ class ChildInfoCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(
                         Icons.person_outline,
@@ -102,11 +105,18 @@ class ChildInfoCard extends StatelessWidget {
                         color: Colors.grey[600],
                       ),
                       const SizedBox(width: 8),
-                      Text('Guardian ID: ${child.guardianId}'),
+                      Expanded(
+                        child: Text(
+                          'Guardian ID: ${child.guardianId}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(
                         Icons.info_outline,
@@ -114,8 +124,13 @@ class ChildInfoCard extends StatelessWidget {
                         color: Colors.grey[600],
                       ),
                       const SizedBox(width: 8),
-                      const Text(
-                          'Note: Guardian details need to be fetched separately'),
+                      const Expanded(
+                        child: Text(
+                          'Note: Guardian details need to be fetched separately',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -157,6 +172,8 @@ class ChildInfoCard extends StatelessWidget {
                     Text(
                       child.specialNotes!,
                       style: TextStyle(color: Colors.orange[700]),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 3,
                     ),
                   ],
                 ),

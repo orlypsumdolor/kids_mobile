@@ -8,18 +8,22 @@ import '../../data/datasources/local/preferences_helper.dart';
 import '../../data/datasources/remote/api_service.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../data/repositories/checkin_repository_impl.dart';
-import '../../data/repositories/sync_repository_impl.dart';
+import '../../data/repositories/service_repository_impl.dart';
+
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/checkin_repository.dart';
-import '../../domain/repositories/sync_repository.dart';
+import '../../domain/repositories/service_repository.dart';
+
 import '../../domain/usecases/auth_usecases.dart';
 import '../../domain/usecases/checkin_usecases.dart';
 import '../../domain/usecases/checkout_usecases.dart';
-import '../../domain/usecases/sync_usecases.dart';
+import '../../domain/usecases/service_usecases.dart';
+
 import '../../presentation/providers/auth_provider.dart';
 import '../../presentation/providers/checkin_provider.dart';
 import '../../presentation/providers/checkout_provider.dart';
-import '../../presentation/providers/sync_provider.dart';
+import '../../presentation/providers/services_provider.dart';
+
 import '../../core/services/camera_service.dart';
 // import '../../core/services/nfc_service.dart'; // Temporarily disabled
 import '../../core/services/printer_service.dart';
@@ -57,10 +61,8 @@ Future<void> configureDependencies() async {
         apiService: getIt(),
         databaseHelper: getIt(),
       ));
-  getIt.registerLazySingleton<SyncRepository>(() => SyncRepositoryImpl(
+  getIt.registerLazySingleton<ServiceRepository>(() => ServiceRepositoryImpl(
         apiService: getIt(),
-        databaseHelper: getIt(),
-        preferencesHelper: getIt(),
       ));
 
   // Use cases
@@ -81,9 +83,10 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<VerifyPickupCodeUseCase>(
       () => VerifyPickupCodeUseCase(getIt()));
 
-  getIt.registerLazySingleton<SyncDataUseCase>(() => SyncDataUseCase(getIt()));
-  getIt.registerLazySingleton<GetPendingSyncDataUseCase>(
-      () => GetPendingSyncDataUseCase(getIt()));
+  getIt.registerLazySingleton<GetServiceSessionsUseCase>(
+      () => GetServiceSessionsUseCase(getIt()));
+  getIt.registerLazySingleton<GetServiceSessionByIdUseCase>(
+      () => GetServiceSessionByIdUseCase(getIt()));
 
   // Providers
   getIt.registerFactory<AuthProvider>(() => AuthProvider(
@@ -103,8 +106,7 @@ Future<void> configureDependencies() async {
         verifyPickupCodeUseCase: getIt(),
         cameraService: getIt(),
       ));
-  getIt.registerFactory<SyncProvider>(() => SyncProvider(
-        syncDataUseCase: getIt(),
-        getPendingSyncDataUseCase: getIt(),
+  getIt.registerFactory<ServicesProvider>(() => ServicesProvider(
+        getServiceSessionsUseCase: getIt(),
       ));
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/services_provider.dart';
 
-class ServiceSelector extends StatelessWidget {
+class ServiceSelector extends StatefulWidget {
   final String? selectedServiceId;
   final Function(String) onServiceSelected;
 
@@ -11,14 +13,21 @@ class ServiceSelector extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    // Mock services - in real app, this would come from a provider
-    final services = [
-      {'id': '1', 'name': 'Sunday Morning Service', 'time': '9:00 AM'},
-      {'id': '2', 'name': 'Sunday Evening Service', 'time': '6:00 PM'},
-      {'id': '3', 'name': 'Wednesday Kids Club', 'time': '7:00 PM'},
-    ];
+  State<ServiceSelector> createState() => _ServiceSelectorState();
+}
 
+class _ServiceSelectorState extends State<ServiceSelector> {
+  @override
+  void initState() {
+    super.initState();
+    // Load services when widget initializes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ServicesProvider>().loadServices();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -28,22 +37,62 @@ class ServiceSelector extends StatelessWidget {
             Text(
               'Select Service Session',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
             const SizedBox(height: 12),
-            ...services.map((service) => RadioListTile<String>(
-              title: Text(service['name']!),
-              subtitle: Text(service['time']!),
-              value: service['id']!,
-              groupValue: selectedServiceId,
-              onChanged: (value) {
-                if (value != null) {
-                  onServiceSelected(value);
+            Consumer<ServicesProvider>(
+              builder: (context, servicesProvider, child) {
+                if (servicesProvider.isLoading) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
                 }
+
+                if (servicesProvider.error != null) {
+                  return Column(
+                    children: [
+                      Text(
+                        'Error loading services: ${servicesProvider.error}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      ElevatedButton(
+                        onPressed: () => servicesProvider.loadServices(),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  );
+                }
+
+                if (servicesProvider.services.isEmpty) {
+                  return const Text('No services available');
+                }
+
+                return Column(
+                  children: servicesProvider.services
+                      .map(
+                        (service) => RadioListTile<String>(
+                          title: Text(service.name),
+                          subtitle:
+                              Text('${service.startTime} - ${service.endTime}'),
+                          value: service.id,
+                          groupValue: widget.selectedServiceId,
+                          onChanged: (value) {
+                            if (value != null) {
+                              widget.onServiceSelected(value);
+                            }
+                          },
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      )
+                      .toList(),
+                );
               },
-              contentPadding: EdgeInsets.zero,
-            )),
+            ),
           ],
         ),
       ),

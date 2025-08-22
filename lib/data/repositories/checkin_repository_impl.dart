@@ -6,6 +6,10 @@ import '../datasources/local/database_helper.dart';
 import '../models/child_model.dart';
 import '../models/checkin_session_model.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:convert';
+import '../../domain/entities/attendance_record.dart';
+import '../models/attendance_record_model.dart';
+import 'package:dio/dio.dart';
 
 class CheckinRepositoryImpl implements CheckinRepository {
   final ApiService _apiService;
@@ -21,34 +25,63 @@ class CheckinRepositoryImpl implements CheckinRepository {
   @override
   Future<Child?> getChildByQrCode(String qrCode) async {
     try {
-      // Try local database first
-      final localResults = await _databaseHelper.query(
-        'children',
-        where: 'qr_code = ? AND is_active = 1',
-        whereArgs: [qrCode],
-      );
+      String childId = qrCode;
 
-      if (localResults.isNotEmpty) {
-        final childModel = ChildModel.fromJson(localResults.first);
-        return childModel.toEntity();
-      }
-
-      // If not found locally and online, try API
-      if (await _apiService.isOnline()) {
-        final response = await _apiService.getChildByQrCode(qrCode);
-        if (response.data['success'] == true &&
-            response.data['data'].isNotEmpty) {
-          final childModel = ChildModel.fromJson(response.data['data'][0]);
-
-          // Cache in local database
-          await _databaseHelper.insert('children', childModel.toJson());
-
-          return childModel.toEntity();
+      // Check if QR code contains JSON data
+      if (qrCode.startsWith('{') && qrCode.contains('"childId"')) {
+        try {
+          final qrData = jsonDecode(qrCode);
+          childId = qrData['childId'] ?? qrCode;
+        } catch (e) {
+          // If JSON parsing fails, use original QR code
+          childId = qrCode;
         }
       }
 
+      // Try local database first
+      // final localResults = await _databaseHelper.query(
+      //   'children',
+      //   where: 'id = ? AND is_active = 1',
+      //   whereArgs: [childId],
+      // );
+
+      // if (localResults.isNotEmpty) {
+      //   final childModel = ChildModel.fromJson(localResults.first);
+      //   // log the child model
+      //   print('Local Child model: $childModel');
+      //   return childModel.toEntity();
+      // }
+
+      // Try API - use childId directly instead of QR code search
+      final response = await _apiService.getChildById(childId);
+      print('API Response: ${response.data}');
+      print('Response success: ${response.data['success']}');
+      print('Response data: ${response.data['data']}');
+
+      if (response.data['success'] == true && response.data['data'] != null) {
+        // Handle nested child data structure
+        final childData = response.data['data']['child'];
+        print('Child data extracted: $childData');
+
+        if (childData == null) {
+          print('Child data is null in response: ${response.data}');
+          return null;
+        }
+        final childModel = ChildModel.fromJson(childData);
+
+        // Cache in local database
+        //await _databaseHelper.insert('children', childModel.toJson());
+        // log the child model
+        print('Child model: $childModel');
+        return childModel.toEntity();
+      }
+
+      // log the response
+      print('Response: $response');
+      print('child is nulllll');
       return null;
     } catch (e) {
+      print('Error: $e');
       return null;
     }
   }
@@ -56,11 +89,24 @@ class CheckinRepositoryImpl implements CheckinRepository {
   @override
   Future<Child?> getChildByRfidCode(String rfidCode) async {
     try {
+      String childId = rfidCode;
+
+      // Check if RFID contains JSON data
+      if (rfidCode.startsWith('{') && rfidCode.contains('"childId"')) {
+        try {
+          final rfidData = jsonDecode(rfidCode);
+          childId = rfidData['childId'] ?? rfidCode;
+        } catch (e) {
+          // If JSON parsing fails, use original RFID code
+          childId = rfidCode;
+        }
+      }
+
       // Try local database first
       final localResults = await _databaseHelper.query(
         'children',
-        where: 'rfid_code = ? AND is_active = 1',
-        whereArgs: [rfidCode],
+        where: 'id = ? AND is_active = 1',
+        whereArgs: [childId],
       );
 
       if (localResults.isNotEmpty) {
@@ -68,18 +114,27 @@ class CheckinRepositoryImpl implements CheckinRepository {
         return childModel.toEntity();
       }
 
-      // If not found locally and online, try API
-      if (await _apiService.isOnline()) {
-        final response = await _apiService.getChildByRfidCode(rfidCode);
-        if (response.data['success'] == true &&
-            response.data['data'].isNotEmpty) {
-          final childModel = ChildModel.fromJson(response.data['data'][0]);
+      // Try API - use childId directly instead of RFID search
+      final response = await _apiService.getChildById(childId);
+      print('API Response (RFID): ${response.data}');
+      print('Response success (RFID): ${response.data['success']}');
+      print('Response data (RFID): ${response.data['data']}');
 
-          // Cache in local database
-          await _databaseHelper.insert('children', childModel.toJson());
+      if (response.data['success'] == true && response.data['data'] != null) {
+        // Handle nested child data structure
+        final childData = response.data['data']['child'];
+        print('Child data extracted (RFID): $childData');
 
-          return childModel.toEntity();
+        if (childData == null) {
+          print('Child data is null in response: ${response.data}');
+          return null;
         }
+        final childModel = ChildModel.fromJson(childData);
+
+        // Cache in local database
+        await _databaseHelper.insert('children', childModel.toJson());
+
+        return childModel.toEntity();
       }
 
       return null;
@@ -89,53 +144,116 @@ class CheckinRepositoryImpl implements CheckinRepository {
   }
 
   @override
-  Future<CheckInSession> checkInChild(
+  Future<AttendanceRecord> checkInChild(
       String childId, String volunteerId, String serviceSession) async {
-    final sessionId = _uuid.v4();
-    final pickupCode = _generatePickupCode();
-    final now = DateTime.now();
+    try {
+      print('=== CHECK-IN PROCESS START ===');
+      print('Child ID: $childId');
+      print('Volunteer ID: $volunteerId');
+      print('Service Session: $serviceSession');
 
-    final sessionModel = CheckInSessionModel(
-      id: sessionId,
-      serviceSessionId: serviceSession,
-      date: now,
-      createdBy: volunteerId,
-      checkedInChildren: [childId],
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    );
+      // API call for check-in
+      final response = await _apiService.checkInChild(
+        childId: childId,
+        serviceSessionId: serviceSession,
+      );
 
-    // Save locally first
-    await _databaseHelper.insert('checkin_sessions', sessionModel.toJson());
+      print('=== API RESPONSE ===');
+      print('Status Code: ${response.statusCode}');
+      print('Response Data: ${response.data}');
 
-    // Try to sync with server
-    if (await _apiService.isOnline()) {
-      try {
-        final response = await _apiService.checkInChild(
-          childId: childId,
-          serviceSessionId: serviceSession,
-        );
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final serverData = response.data['data'];
+        final recordData = serverData['record'];
 
-        if (response.data['success'] == true) {
-          // Update with server response data if needed
-          final serverData = response.data['data'];
-          await _databaseHelper.update(
-            'checkin_sessions',
-            {
-              'is_synced': 1,
-              'pickup_code': serverData['pickupCode'] ?? pickupCode,
-            },
-            where: 'id = ?',
-            whereArgs: [sessionId],
-          );
+        print('=== PARSING RESPONSE ===');
+        print('Server Data: $serverData');
+        print('Record Data: $recordData');
+
+        if (recordData != null) {
+          print('=== CREATING ATTENDANCE MODEL ===');
+          print('Record data type: ${recordData.runtimeType}');
+          print(
+              'Record data keys: ${recordData is Map ? recordData.keys.toList() : 'Not a Map'}');
+
+          // Validate required fields exist
+          if (recordData is Map<String, dynamic>) {
+            final requiredFields = [
+              '_id',
+              'child',
+              'serviceSession',
+              'serviceDate',
+              'checkInTime',
+              'checkedInBy',
+              'createdAt',
+              'updatedAt'
+            ];
+            final missingFields = <String>[];
+
+            for (final field in requiredFields) {
+              if (!recordData.containsKey(field)) {
+                missingFields.add(field);
+              }
+            }
+
+            if (missingFields.isNotEmpty) {
+              print('WARNING: Missing required fields: $missingFields');
+              print('Available fields: ${recordData.keys.toList()}');
+            } else {
+              print('All required fields present');
+            }
+          }
+
+          // Parse the server response into AttendanceRecordModel
+          final attendanceModel = AttendanceRecordModel.fromJson(recordData);
+          print('Parsed attendance model: $attendanceModel');
+
+          // Convert to entity and return
+          final attendanceRecord = attendanceModel.toEntity();
+          print('=== FINAL ATTENDANCE RECORD ===');
+          print('ID: ${attendanceRecord.id}');
+          print('Child ID: ${attendanceRecord.childId}');
+          print('Service Session: ${attendanceRecord.serviceSessionId}');
+          print('Pickup Code: ${attendanceRecord.pickupCode}');
+          print('Check-in Time: ${attendanceRecord.checkInTime}');
+          print('=== CHECK-IN PROCESS COMPLETE ===');
+
+          return attendanceRecord;
+        } else {
+          print('ERROR: No attendance record data in server response');
+          throw Exception('No attendance record data in server response');
         }
-      } catch (e) {
-        // Continue with offline operation
+      } else {
+        final errorMessage = response.data['message'] ?? 'Check-in failed';
+        print('ERROR: $errorMessage');
+        throw Exception(errorMessage);
+      }
+    } catch (e) {
+      print('=== CHECK-IN ERROR ===');
+      print('Error: $e');
+      print('Stack trace: ${StackTrace.current}');
+
+      // Handle DioException to extract server error messages
+      if (e is DioException) {
+        if (e.response != null) {
+          final responseData = e.response!.data;
+          print('Response data in error: $responseData');
+
+          if (responseData is Map<String, dynamic>) {
+            final errorMessage = responseData['message'] ?? 'Check-in failed';
+            print('Extracted error message: $errorMessage');
+            throw Exception(errorMessage);
+          } else {
+            throw Exception('Check-in failed: ${e.message}');
+          }
+        } else {
+          throw Exception('Network error: ${e.message}');
+        }
+      } else {
+        // Handle other types of exceptions
+        throw Exception('Check-in failed: ${e.toString()}');
       }
     }
-
-    return sessionModel.toEntity();
   }
 
   @override
@@ -168,26 +286,19 @@ class CheckinRepositoryImpl implements CheckinRepository {
       whereArgs: [sessionId],
     );
 
-    // Try to sync with server
-    if (await _apiService.isOnline()) {
-      try {
-        final response = await _apiService.checkOutChild(
-          recordId: sessionId,
-          pickupCode: sessionData['pickup_code'],
-        );
+    // API call for check-out
+    try {
+      final response = await _apiService.checkOutChild(
+        recordId: sessionId,
+        pickupCode: sessionData['pickup_code'],
+      );
 
-        if (response.data['success'] == true) {
-          // Update sync status
-          await _databaseHelper.update(
-            'checkin_sessions',
-            {'is_synced': 1},
-            where: 'id = ?',
-            whereArgs: [sessionId],
-          );
-        }
-      } catch (e) {
-        // Continue with offline operation
+      if (response.data['success'] == true) {
+        // API call successful
+        print('Check-out synced with server');
       }
+    } catch (e) {
+      // Continue with local operation
     }
 
     // Return updated session
@@ -196,6 +307,10 @@ class CheckinRepositoryImpl implements CheckinRepository {
       where: 'id = ?',
       whereArgs: [sessionId],
     );
+
+    if (results.isEmpty) {
+      throw Exception('Updated session not found');
+    }
 
     final sessionModel = CheckInSessionModel.fromJson(results.first);
     return sessionModel.toEntity();

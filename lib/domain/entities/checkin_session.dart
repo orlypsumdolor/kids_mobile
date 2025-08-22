@@ -24,8 +24,11 @@ class CheckInSession extends Equatable {
   });
 
   // Helper getters for backward compatibility
-  String get childId =>
-      checkedInChildren.isNotEmpty ? checkedInChildren.first : '';
+  String get childId {
+    if (checkedInChildren.isEmpty) return '';
+    return checkedInChildren.first;
+  }
+
   String get volunteerId => createdBy;
   String get serviceSession => serviceSessionId;
   String get pickupCode => ''; // Not applicable for session-level entity
@@ -33,7 +36,6 @@ class CheckInSession extends Equatable {
   DateTime? get checkoutTime => isActive ? null : updatedAt;
   SessionStatus get status =>
       isActive ? SessionStatus.active : SessionStatus.completed;
-  bool get isSynced => true; // Always synced when coming from API
 
   Duration? get duration {
     if (checkoutTime == null) return null;

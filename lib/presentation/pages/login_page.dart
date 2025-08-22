@@ -75,8 +75,8 @@ class _LoginPageState extends State<LoginPage> {
                 Text(
                   'Sign in to your account',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+                        color: Colors.grey[600],
+                      ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 48),
@@ -103,7 +103,9 @@ class _LoginPageState extends State<LoginPage> {
                   obscureText: _obscurePassword,
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                      _obscurePassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                     ),
                     onPressed: () {
                       setState(() {
@@ -150,10 +152,16 @@ class _LoginPageState extends State<LoginPage> {
                         margin: const EdgeInsets.only(top: 16),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.error.withOpacity(0.1),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .error
+                              .withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: Theme.of(context).colorScheme.error.withOpacity(0.3),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .error
+                                .withOpacity(0.3),
                           ),
                         ),
                         child: Text(

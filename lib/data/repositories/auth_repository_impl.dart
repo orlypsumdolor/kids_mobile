@@ -20,14 +20,14 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       if (await _apiService.isOnline()) {
         final response = await _apiService.login(username, password);
-        
+
         if (response.data['success'] == true) {
           final userModel = UserModel.fromJson(response.data['data']['user']);
           final token = response.data['data']['token'];
 
           // Set token for future requests
           _apiService.setAuthToken(token);
-          
+
           // Save to local storage
           await _preferencesHelper.setUserData(jsonEncode(userModel.toJson()));
           await _preferencesHelper.setAuthToken(token);
@@ -37,19 +37,8 @@ class AuthRepositoryImpl implements AuthRepository {
           throw Exception(response.data['message'] ?? 'Login failed');
         }
       } else {
-        // Offline login - check if user data exists
-        final userData = _preferencesHelper.getUserData();
-        if (userData != null) {
-          final userModel = UserModel.fromJson(jsonDecode(userData));
-          final token = _preferencesHelper.getAuthToken();
-          if (token != null) {
-            _apiService.setAuthToken(token);
-          }
-          // In a real app, you'd validate credentials offline too
-          return userModel.toEntity();
-        } else {
-          throw Exception('No internet connection and no cached credentials');
-        }
+        throw Exception(
+            'No internet connection. Please check your network and try again.');
       }
     } catch (e) {
       throw Exception('Login failed: $e');
@@ -77,22 +66,20 @@ class AuthRepositoryImpl implements AuthRepository {
       final token = _preferencesHelper.getAuthToken();
       if (token != null) {
         _apiService.setAuthToken(token);
-        
-        // Try to get fresh user data if online
-        if (await _apiService.isOnline()) {
-          try {
-            final response = await _apiService.getCurrentUser();
-            if (response.data['success'] == true) {
-              final userModel = UserModel.fromJson(response.data['data']);
-              await _preferencesHelper.setUserData(jsonEncode(userModel.toJson()));
-              return userModel.toEntity();
-            }
-          } catch (e) {
-            // Fall back to cached data
+
+        try {
+          final response = await _apiService.getCurrentUser();
+          if (response.data['success'] == true) {
+            final userModel = UserModel.fromJson(response.data['data']);
+            await _preferencesHelper
+                .setUserData(jsonEncode(userModel.toJson()));
+            return userModel.toEntity();
           }
+        } catch (e) {
+          // API call failed
         }
       }
-      
+
       final userData = _preferencesHelper.getUserData();
       if (userData != null) {
         final userModel = UserModel.fromJson(jsonDecode(userData));

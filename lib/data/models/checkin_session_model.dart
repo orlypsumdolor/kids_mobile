@@ -41,13 +41,13 @@ class CheckInSessionModel {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'serviceSession': serviceSessionId,
+      'service_session_id': serviceSessionId,
       'date': date.toIso8601String(),
-      'createdBy': createdBy,
-      'checkedInChildren': checkedInChildren,
-      'isActive': isActive,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
+      'created_by': createdBy,
+      'checked_in_children': checkedInChildren.join(','),
+      'is_active': isActive ? 1 : 0,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
     };
   }
 

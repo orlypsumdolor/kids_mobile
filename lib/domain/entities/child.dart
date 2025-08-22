@@ -9,16 +9,16 @@ class Child extends Equatable {
   final String guardianId;
   final EmergencyContact? emergencyContact;
   final String? specialNotes;
-  final String qrCode;
+  final String? qrCode;
   final String? rfidTag;
   final bool isActive;
   final bool currentlyCheckedIn;
   final DateTime? lastCheckIn;
   final DateTime? lastCheckOut;
-  final String createdBy;
+  final String? createdBy;
   final String? updatedBy;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   const Child({
     required this.id,
@@ -29,27 +29,38 @@ class Child extends Equatable {
     required this.guardianId,
     this.emergencyContact,
     this.specialNotes,
-    required this.qrCode,
+    this.qrCode,
     this.rfidTag,
     required this.isActive,
     required this.currentlyCheckedIn,
     this.lastCheckIn,
     this.lastCheckOut,
-    required this.createdBy,
+    this.createdBy,
     this.updatedBy,
-    required this.createdAt,
-    required this.updatedAt,
+    this.createdAt,
+    this.updatedAt,
   });
 
   // Helper getters for backward compatibility
-  String get firstName => fullName.split(' ').first;
-  String get lastName => fullName.split(' ').length > 1 ? fullName.split(' ').skip(1).join(' ') : '';
+  String get firstName {
+    if (fullName.isEmpty) return '';
+    final parts = fullName.split(' ');
+    return parts.isNotEmpty ? parts.first : '';
+  }
+
+  String get lastName {
+    if (fullName.isEmpty) return '';
+    final parts = fullName.split(' ');
+    return parts.length > 1 ? parts.skip(1).join(' ') : '';
+  }
+
   String get rfidCode => rfidTag ?? '';
-  
+  String get qrCodeValue => qrCode ?? '';
+
   int get ageInYears {
     final now = DateTime.now();
     int age = now.year - dateOfBirth.year;
-    if (now.month < dateOfBirth.month || 
+    if (now.month < dateOfBirth.month ||
         (now.month == dateOfBirth.month && now.day < dateOfBirth.day)) {
       age--;
     }

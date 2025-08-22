@@ -34,10 +34,17 @@ class Guardian extends Equatable {
   });
 
   // Helper getters for backward compatibility
-  String get firstName => fullName.split(' ').first;
-  String get lastName => fullName.split(' ').length > 1
-      ? fullName.split(' ').skip(1).join(' ')
-      : '';
+  String get firstName {
+    if (fullName.isEmpty) return '';
+    final parts = fullName.split(' ');
+    return parts.isNotEmpty ? parts.first : '';
+  }
+  
+  String get lastName {
+    if (fullName.isEmpty) return '';
+    final parts = fullName.split(' ');
+    return parts.length > 1 ? parts.skip(1).join(' ') : '';
+  }
 
   bool get isPickupCodeValid {
     if (pickupCodeExpiry == null) return true;

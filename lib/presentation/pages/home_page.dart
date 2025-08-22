@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
-import '../providers/sync_provider.dart';
 import '../widgets/role_based_navigation.dart';
-import '../widgets/sync_status_card.dart';
 import '../../core/router/app_router.dart';
 
 class HomePage extends StatefulWidget {
@@ -18,9 +16,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SyncProvider>().initialize();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {});
   }
 
   @override
@@ -120,8 +116,6 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 20),
 
-              // Sync status
-              const SyncStatusCard(),
               const SizedBox(height: 20),
 
               // Role-based navigation

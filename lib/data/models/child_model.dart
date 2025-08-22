@@ -9,16 +9,16 @@ class ChildModel {
   final String guardianId;
   final EmergencyContactModel? emergencyContact;
   final String? specialNotes;
-  final String qrCode;
+  final String? qrCode;
   final String? rfidTag;
   final bool isActive;
   final bool currentlyCheckedIn;
   final DateTime? lastCheckIn;
   final DateTime? lastCheckOut;
-  final String createdBy;
+  final String? createdBy;
   final String? updatedBy;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   ChildModel({
     required this.id,
@@ -29,63 +29,115 @@ class ChildModel {
     required this.guardianId,
     this.emergencyContact,
     this.specialNotes,
-    required this.qrCode,
+    this.qrCode,
     this.rfidTag,
     required this.isActive,
     required this.currentlyCheckedIn,
     this.lastCheckIn,
     this.lastCheckOut,
-    required this.createdBy,
+    this.createdBy,
     this.updatedBy,
-    required this.createdAt,
-    required this.updatedAt,
+    this.createdAt,
+    this.updatedAt,
   });
 
   factory ChildModel.fromJson(Map<String, dynamic> json) {
-    return ChildModel(
-      id: json['_id'] ?? json['id'],
-      fullName: json['fullName'],
-      dateOfBirth: DateTime.parse(json['dateOfBirth']),
-      gender: json['gender'],
-      ageGroup: json['ageGroup'],
-      guardianId: json['guardian'] is String ? json['guardian'] : json['guardian']['_id'],
-      emergencyContact: json['emergencyContact'] != null 
-          ? EmergencyContactModel.fromJson(json['emergencyContact'])
-          : null,
-      specialNotes: json['specialNotes'],
-      qrCode: json['qrCode'],
-      rfidTag: json['rfidTag'],
-      isActive: json['isActive'] ?? true,
-      currentlyCheckedIn: json['currentlyCheckedIn'] ?? false,
-      lastCheckIn: json['lastCheckIn'] != null ? DateTime.parse(json['lastCheckIn']) : null,
-      lastCheckOut: json['lastCheckOut'] != null ? DateTime.parse(json['lastCheckOut']) : null,
-      createdBy: json['createdBy'] is String ? json['createdBy'] : json['createdBy']['_id'],
-      updatedBy: json['updatedBy'] is String ? json['updatedBy'] : json['updatedBy']['_id'],
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
-    );
+    try {
+      print('ChildModel.fromJson called with: $json');
+
+      // Extract guardian ID safely
+      String? guardianId;
+      if (json['guardian'] != null) {
+        if (json['guardian'] is String) {
+          guardianId = json['guardian'];
+        } else if (json['guardian'] is Map) {
+          guardianId = json['guardian']['_id'];
+        }
+      }
+
+      // Extract createdBy safely
+      String? createdBy;
+      if (json['createdBy'] != null) {
+        if (json['createdBy'] is String) {
+          createdBy = json['createdBy'];
+        } else if (json['createdBy'] is Map) {
+          createdBy = json['createdBy']['_id'];
+        }
+      }
+
+      // Extract updatedBy safely
+      String? updatedBy;
+      if (json['updatedBy'] != null) {
+        if (json['updatedBy'] is String) {
+          updatedBy = json['updatedBy'];
+        } else if (json['updatedBy'] is Map) {
+          updatedBy = json['updatedBy']['_id'];
+        }
+      }
+
+      final childModel = ChildModel(
+        id: json['_id'] ?? json['id'] ?? '',
+        fullName: json['fullName'] ?? '',
+        dateOfBirth: json['dateOfBirth'] != null
+            ? DateTime.parse(json['dateOfBirth'])
+            : DateTime.now(),
+        gender: json['gender'] ?? '',
+        ageGroup: json['ageGroup'] ?? '',
+        guardianId: guardianId ?? '',
+        emergencyContact: json['emergencyContact'] != null
+            ? EmergencyContactModel.fromJson(json['emergencyContact'])
+            : null,
+        specialNotes: json['specialNotes'] ?? '',
+        qrCode: json['qrCode'] ?? '',
+        rfidTag: json['rfidTag'] ?? '',
+        isActive: json['isActive'] ?? true,
+        currentlyCheckedIn: json['currentlyCheckedIn'] ?? false,
+        lastCheckIn: json['lastCheckIn'] != null
+            ? DateTime.parse(json['lastCheckIn'])
+            : null,
+        lastCheckOut: json['lastCheckOut'] != null
+            ? DateTime.parse(json['lastCheckOut'])
+            : null,
+        createdBy: createdBy ?? '',
+        updatedBy: updatedBy,
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'])
+            : DateTime.now(),
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'])
+            : DateTime.now(),
+      );
+
+      print('ChildModel created successfully: $childModel');
+      return childModel;
+    } catch (e, stackTrace) {
+      print('Error in ChildModel.fromJson: $e');
+      print('Stack trace: $stackTrace');
+      print('JSON data: $json');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'fullName': fullName,
-      'dateOfBirth': dateOfBirth.toIso8601String(),
+      'full_name': fullName,
+      'date_of_birth': dateOfBirth.toIso8601String(),
       'gender': gender,
-      'ageGroup': ageGroup,
-      'guardian': guardianId,
-      'emergencyContact': emergencyContact?.toJson(),
-      'specialNotes': specialNotes,
-      'qrCode': qrCode,
-      'rfidTag': rfidTag,
-      'isActive': isActive,
-      'currentlyCheckedIn': currentlyCheckedIn,
-      'lastCheckIn': lastCheckIn?.toIso8601String(),
-      'lastCheckOut': lastCheckOut?.toIso8601String(),
-      'createdBy': createdBy,
-      'updatedBy': updatedBy,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
+      'age_group': ageGroup,
+      'guardian_id': guardianId,
+      'emergency_contact': emergencyContact?.toJson().toString(),
+      'special_notes': specialNotes,
+      'qr_code': qrCode,
+      'rfid_tag': rfidTag,
+      'is_active': isActive ? 1 : 0,
+      'currently_checked_in': currentlyCheckedIn ? 1 : 0,
+      'last_check_in': lastCheckIn?.toIso8601String(),
+      'last_check_out': lastCheckOut?.toIso8601String(),
+      'created_by': createdBy,
+      'updated_by': updatedBy,
+      'created_at': createdAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
     };
   }
 
@@ -113,8 +165,18 @@ class ChildModel {
   }
 
   // Helper getters for backward compatibility
-  String get firstName => fullName.split(' ').first;
-  String get lastName => fullName.split(' ').length > 1 ? fullName.split(' ').skip(1).join(' ') : '';
+  String get firstName {
+    if (fullName.isEmpty) return '';
+    final parts = fullName.split(' ');
+    return parts.isNotEmpty ? parts.first : '';
+  }
+
+  String get lastName {
+    if (fullName.isEmpty) return '';
+    final parts = fullName.split(' ');
+    return parts.length > 1 ? parts.skip(1).join(' ') : '';
+  }
+
   String get rfidCode => rfidTag ?? '';
 }
 

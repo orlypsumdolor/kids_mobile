@@ -28,9 +28,18 @@ class User extends Equatable {
   });
 
   // Helper getters for backward compatibility
-  String get firstName => fullName.split(' ').first;
-  String get lastName => fullName.split(' ').length > 1 ? fullName.split(' ').skip(1).join(' ') : '';
-  
+  String get firstName {
+    if (fullName.isEmpty) return '';
+    final parts = fullName.split(' ');
+    return parts.isNotEmpty ? parts.first : '';
+  }
+
+  String get lastName {
+    if (fullName.isEmpty) return '';
+    final parts = fullName.split(' ');
+    return parts.length > 1 ? parts.skip(1).join(' ') : '';
+  }
+
   UserRole get userRole {
     switch (role.toLowerCase()) {
       case 'admin':
@@ -41,15 +50,20 @@ class User extends Equatable {
         return UserRole.volunteer;
     }
   }
-  
-  bool get canScan => userRole == UserRole.volunteer || userRole == UserRole.staff || userRole == UserRole.admin;
-  bool get canViewReports => userRole == UserRole.staff || userRole == UserRole.admin;
+
+  bool get canScan =>
+      userRole == UserRole.volunteer ||
+      userRole == UserRole.staff ||
+      userRole == UserRole.admin;
+  bool get canViewReports =>
+      userRole == UserRole.staff || userRole == UserRole.admin;
   bool get canManageUsers => userRole == UserRole.admin;
-  
+
   // Direct role checks
   bool get isAdmin => role == 'admin';
   bool get isStaff => role == 'staff' || role == 'admin';
-  bool get isVolunteer => role == 'volunteer' || role == 'staff' || role == 'admin';
+  bool get isVolunteer =>
+      role == 'volunteer' || role == 'staff' || role == 'admin';
 
   @override
   List<Object?> get props => [

@@ -11,7 +11,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   bool notificationsEnabled = true;
-  bool autoSync = true;
+
   String selectedPrinter = 'None';
 
   @override
@@ -136,18 +136,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       onChanged: (value) {
                         setState(() {
                           notificationsEnabled = value;
-                        });
-                      },
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    SwitchListTile(
-                      title: const Text('Auto Sync'),
-                      subtitle:
-                          const Text('Automatically sync data when online'),
-                      value: autoSync,
-                      onChanged: (value) {
-                        setState(() {
-                          autoSync = value;
                         });
                       },
                       contentPadding: EdgeInsets.zero,

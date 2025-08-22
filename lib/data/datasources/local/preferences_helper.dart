@@ -43,17 +43,4 @@ class PreferencesHelper {
   String? getPrinterAddress() {
     return _prefs.getString('printer_bluetooth_address');
   }
-
-  // Sync settings
-  Future<void> setLastSyncTime(DateTime dateTime) async {
-    await _prefs.setString('last_sync_time', dateTime.toIso8601String());
-  }
-
-  DateTime? getLastSyncTime() {
-    final timeString = _prefs.getString('last_sync_time');
-    if (timeString != null) {
-      return DateTime.parse(timeString);
-    }
-    return null;
-  }
 }

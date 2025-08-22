@@ -30,20 +30,85 @@ class AttendanceRecordModel {
   });
 
   factory AttendanceRecordModel.fromJson(Map<String, dynamic> json) {
-    return AttendanceRecordModel(
-      id: json['_id'] ?? json['id'],
-      childId: json['child'] is String ? json['child'] : json['child']['_id'],
-      serviceSessionId: json['serviceSession'] is String ? json['serviceSession'] : json['serviceSession']['_id'],
-      serviceDate: DateTime.parse(json['serviceDate']),
-      checkInTime: DateTime.parse(json['checkInTime']),
-      checkOutTime: json['checkOutTime'] != null ? DateTime.parse(json['checkOutTime']) : null,
-      checkedInBy: json['checkedInBy'] is String ? json['checkedInBy'] : json['checkedInBy']['_id'],
-      checkedOutBy: json['checkedOutBy'] is String ? json['checkedOutBy'] : json['checkedOutBy']['_id'],
-      pickupCode: json['pickupCode'],
-      notes: json['notes'],
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
-    );
+    try {
+      print('AttendanceRecordModel.fromJson called with: $json');
+
+      // Helper function to safely extract ID from object or string
+      String extractId(dynamic value, String fieldName) {
+        if (value == null) {
+          print('Warning: $fieldName is null');
+          return 'unknown_${fieldName}_id';
+        }
+        if (value is String) {
+          return value;
+        }
+        if (value is Map<String, dynamic>) {
+          return value['_id'] ?? 'unknown_${fieldName}_id';
+        }
+        print('Warning: $fieldName has unexpected type: ${value.runtimeType}');
+        return 'unknown_${fieldName}_id';
+      }
+
+      // Helper function to safely parse DateTime
+      DateTime parseDateTime(dynamic value, String fieldName) {
+        if (value == null) {
+          print('Warning: $fieldName is null, using current time');
+          return DateTime.now();
+        }
+        try {
+          return DateTime.parse(value.toString());
+        } catch (e) {
+          print(
+              'Error parsing $fieldName: $value, error: $e, using current time');
+          return DateTime.now();
+        }
+      }
+
+      // Handle different API response structures
+      final id = json['_id'] ?? json['id'] ?? 'unknown_id';
+      final childId = extractId(json['child'], 'child');
+      final serviceSessionId =
+          extractId(json['serviceSession'], 'serviceSession');
+      final serviceDate = parseDateTime(json['serviceDate'], 'serviceDate');
+      final checkInTime = parseDateTime(json['checkInTime'], 'checkInTime');
+      final checkOutTime = json['checkOutTime'] != null
+          ? parseDateTime(json['checkOutTime'], 'checkOutTime')
+          : null;
+      final checkedInBy = extractId(json['checkedInBy'], 'checkedInBy');
+      final checkedOutBy = json['checkedOutBy'] != null
+          ? extractId(json['checkedOutBy'], 'checkedOutBy')
+          : null;
+
+      // Handle optional fields that might not be present in the API response
+      final pickupCode = json['pickupCode'] ?? json['pickup_code'];
+      final notes = json['notes'] ?? json['note'];
+
+      final createdAt = parseDateTime(json['createdAt'], 'createdAt');
+      final updatedAt = parseDateTime(json['updatedAt'], 'updatedAt');
+
+      final model = AttendanceRecordModel(
+        id: id,
+        childId: childId,
+        serviceSessionId: serviceSessionId,
+        serviceDate: serviceDate,
+        checkInTime: checkInTime,
+        checkOutTime: checkOutTime,
+        checkedInBy: checkedInBy,
+        checkedOutBy: checkedOutBy,
+        pickupCode: pickupCode,
+        notes: notes,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+      );
+
+      print('Successfully created AttendanceRecordModel: $model');
+      return model;
+    } catch (e, stackTrace) {
+      print('Error in AttendanceRecordModel.fromJson: $e');
+      print('Stack trace: $stackTrace');
+      print('JSON data: $json');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {

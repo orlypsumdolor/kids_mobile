@@ -32,20 +32,49 @@ class ServiceSessionModel {
   });
 
   factory ServiceSessionModel.fromJson(Map<String, dynamic> json) {
+    DateTime parseDateTime(String? dateString) {
+      if (dateString == null) return DateTime.now();
+      try {
+        return DateTime.parse(dateString);
+      } catch (e) {
+        print('Error parsing date: $dateString, error: $e');
+        return DateTime.now();
+      }
+    }
+
     return ServiceSessionModel(
-      id: json['_id'] ?? json['id'],
-      name: json['name'],
-      startTime: json['startTime'],
-      endTime: json['endTime'],
-      dayOfWeek: json['dayOfWeek'],
+      id: json['_id'] ?? json['id'] ?? 'unknown_id',
+      name: json['name'] ?? 'Unknown Service',
+      startTime: json['startTime'] ?? '00:00',
+      endTime: json['endTime'] ?? '01:00',
+      dayOfWeek: json['dayOfWeek'] ?? 'sunday',
       isActive: json['isActive'] ?? true,
       description: json['description'],
-      ageGroups: List<String>.from(json['ageGroups'] ?? []),
+      ageGroups: (() {
+        try {
+          if (json['ageGroups'] == null) return <String>[];
+          if (json['ageGroups'] is List) {
+            return List<String>.from(json['ageGroups']);
+          }
+          return <String>[];
+        } catch (e) {
+          print('Error parsing ageGroups: ${json['ageGroups']}, error: $e');
+          return <String>[];
+        }
+      })(),
       maxCapacity: json['maxCapacity'],
-      createdBy: json['createdBy'] is String ? json['createdBy'] : json['createdBy']['_id'],
-      updatedBy: json['updatedBy'] is String ? json['updatedBy'] : json['updatedBy']['_id'],
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      createdBy: json['createdBy'] == null
+          ? 'Unknown'
+          : json['createdBy'] is String
+              ? json['createdBy']
+              : json['createdBy']['_id'] ?? 'Unknown',
+      updatedBy: json['updatedBy'] == null
+          ? null
+          : json['updatedBy'] is String
+              ? json['updatedBy']
+              : json['updatedBy']['_id'],
+      createdAt: parseDateTime(json['createdAt']),
+      updatedAt: parseDateTime(json['updatedAt']),
     );
   }
 
@@ -88,13 +117,15 @@ class ServiceSessionModel {
   // Helper getters
   int? get duration {
     if (startTime.isEmpty || endTime.isEmpty) return null;
-    
+
     final startParts = startTime.split(':').map(int.parse).toList();
     final endParts = endTime.split(':').map(int.parse).toList();
-    
+
+    if (startParts.length < 2 || endParts.length < 2) return null;
+
     final startMinutes = startParts[0] * 60 + startParts[1];
     final endMinutes = endParts[0] * 60 + endParts[1];
-    
+
     return endMinutes - startMinutes;
   }
 }

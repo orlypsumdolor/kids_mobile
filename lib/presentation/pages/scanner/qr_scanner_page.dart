@@ -95,7 +95,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
                                     snapshot.data == true
                                         ? Icons.flash_on
                                         : Icons.flash_off,
-                                    color: Theme.of(context).colorScheme.primary,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
                                   );
                                 },
                               ),
