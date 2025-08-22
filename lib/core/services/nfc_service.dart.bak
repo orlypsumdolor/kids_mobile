@@ -1,0 +1,81 @@
+import 'package:nfc_manager/nfc_manager.dart';
+
+class NfcService {
+  bool _isAvailable = false;
+  bool _isListening = false;
+
+  Future<void> initialize() async {
+    _isAvailable = await NfcManager.instance.isAvailable();
+  }
+
+  bool get isAvailable => _isAvailable;
+  bool get isListening => _isListening;
+
+  Future<String?> startReading({
+    required Function(String) onTagRead,
+    required Function(String) onError,
+  }) async {
+    if (!_isAvailable) {
+      onError('NFC is not available on this device');
+      return null;
+    }
+
+    _isListening = true;
+
+    try {
+      await NfcManager.instance.startSession(
+        onDiscovered: (NfcTag tag) async {
+          // Extract RFID data from tag
+          String? rfidData = _extractRfidData(tag);
+
+          if (rfidData != null) {
+            onTagRead(rfidData);
+          } else {
+            onError('Unable to read RFID data from tag');
+          }
+
+          // Stop the session after reading
+          await NfcManager.instance.stopSession();
+          _isListening = false;
+        },
+      );
+    } catch (e) {
+      _isListening = false;
+      onError('Failed to read NFC tag: $e');
+    }
+
+    return null;
+  }
+
+  Future<void> stopReading() async {
+    if (_isListening) {
+      await NfcManager.instance.stopSession();
+      _isListening = false;
+    }
+  }
+
+  String? _extractRfidData(NfcTag tag) {
+    // Try to extract data from different NFC tag types
+    final ndef = Ndef.from(tag);
+    if (ndef != null && ndef.cachedMessage != null) {
+      final record = ndef.cachedMessage!.records.first;
+      return String.fromCharCodes(record.payload);
+    }
+
+    // For simple UID reading - try to get tag ID
+    try {
+      final tagId = tag.data['nfca']?['identifier'] ??
+          tag.data['iso14443']?['identifier'];
+      if (tagId != null) {
+        return List<int>.from(tagId)
+            .map((e) => e.toRadixString(16).padLeft(2, '0'))
+            .join()
+            .toUpperCase();
+      }
+    } catch (e) {
+      // Ignore errors and continue
+    }
+
+    return null;
+  }
+}
