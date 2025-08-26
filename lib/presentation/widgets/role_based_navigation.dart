@@ -29,21 +29,22 @@ class RoleBasedNavigation extends StatelessWidget {
                 children: [
                   Expanded(
                     child: _ActionCard(
-                      title: 'Check In',
-                      subtitle: 'Scan child for check-in',
-                      icon: Icons.login,
-                      color: Theme.of(context).colorScheme.primary,
-                      onTap: () => context.push(AppRouter.checkin),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _ActionCard(
                       title: 'Check Out',
                       subtitle: 'Verify pickup code',
                       icon: Icons.logout,
                       color: Theme.of(context).colorScheme.secondary,
                       onTap: () => context.push(AppRouter.checkout),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _ActionCard(
+                      title: 'Guardian Check-In',
+                      subtitle:
+                          'Scan guardian QR/RFID to check in multiple children',
+                      icon: Icons.family_restroom,
+                      color: Colors.green[600]!,
+                      onTap: () => context.push(AppRouter.guardianCheckin),
                     ),
                   ),
                 ],

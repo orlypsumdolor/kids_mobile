@@ -107,7 +107,7 @@ class ChildInfoCard extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Guardian ID: ${child.guardianId}',
+                          'Guardian ID: ${child.primaryGuardianId ?? 'No guardian'}',
                           overflow: TextOverflow.ellipsis,
                           maxLines: 2,
                         ),

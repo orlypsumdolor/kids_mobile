@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../domain/entities/guardian.dart';
 
 class ApiService {
   late final Dio _dio;
@@ -22,7 +23,7 @@ class ApiService {
       responseBody: true,
       logPrint: (obj) => print(obj),
     ));
-    
+
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         if (_authToken != null) {
@@ -132,11 +133,13 @@ class ApiService {
     return await _dio.get(ApiConstants.attendanceStats);
   }
 
-  Future<Response> getChildAttendanceHistory(String childId, {
+  Future<Response> getChildAttendanceHistory(
+    String childId, {
     int page = 1,
     int limit = 20,
   }) async {
-    return await _dio.get(ApiConstants.childAttendance(childId), queryParameters: {
+    return await _dio
+        .get(ApiConstants.childAttendance(childId), queryParameters: {
       'page': page,
       'limit': limit,
     });
@@ -185,6 +188,76 @@ class ApiService {
   // Health check
   Future<Response> healthCheck() async {
     return await _dio.get(ApiConstants.health);
+  }
+
+  // Guardian endpoints
+  Future<Response> getGuardianByQrCode(String qrCode) async {
+    return await _dio.get(ApiConstants.searchGuardiansByQr(qrCode));
+  }
+
+  Future<Response> getGuardianByRfidTag(String rfidTag) async {
+    return await _dio.get(ApiConstants.searchGuardiansByRfid(rfidTag));
+  }
+
+  Future<Response> getGuardianWithChildren(String guardianId) async {
+    return await _dio.get(ApiConstants.guardianChildren(guardianId));
+  }
+
+  Future<Response> getGuardianById(String guardianId) async {
+    return await _dio.get(ApiConstants.guardianById(guardianId));
+  }
+
+  Future<Response> linkChildToGuardian(
+      String guardianId, String childId) async {
+    return await _dio.post(ApiConstants.linkChildToGuardian(guardianId), data: {
+      'childId': childId,
+    });
+  }
+
+  Future<Response> unlinkChildFromGuardian(
+      String guardianId, String childId) async {
+    return await _dio
+        .delete(ApiConstants.unlinkChildFromGuardian(guardianId, childId));
+  }
+
+  Future<Response> createGuardian(Guardian guardian) async {
+    return await _dio.post(ApiConstants.guardians, data: guardian);
+  }
+
+  Future<Response> updateGuardian(Guardian guardian) async {
+    return await _dio.put(ApiConstants.guardianById(guardian.id),
+        data: guardian);
+  }
+
+  Future<Response> getAllGuardians() async {
+    return await _dio.get(ApiConstants.guardians);
+  }
+
+  // Guardian-based attendance endpoints
+  Future<Response> checkInChildren({
+    required String guardianId,
+    required String serviceId,
+    required List<String> childIds,
+  }) async {
+    return await _dio.post(ApiConstants.guardianCheckin, data: {
+      'guardianId': guardianId,
+      'serviceId': serviceId,
+      'childIds': childIds,
+    });
+  }
+
+  Future<Response> checkOutChildren({
+    required String guardianId,
+    required List<String> childIds,
+  }) async {
+    return await _dio.post(ApiConstants.guardianCheckout, data: {
+      'guardianId': guardianId,
+      'childIds': childIds,
+    });
+  }
+
+  Future<Response> getGuardianCurrentCheckins(String guardianId) async {
+    return await _dio.get(ApiConstants.guardianCurrentCheckins(guardianId));
   }
 
   // Helper method to extract data from API response

@@ -1,7 +1,7 @@
 class ApiConstants {
   // Update this to your actual API URL
   static const String baseUrl =
-      'http://192.168.254.105:5000'; // Local development
+      'http://192.168.254.105:3000'; // Local development - corrected port
   // static const String baseUrl = 'https://api.kidschurch.com'; // Production
 
   // Auth endpoints
@@ -25,6 +25,24 @@ class ApiConstants {
   static String guardianPickupCode(String id) =>
       '/api/guardians/$id/pickup-code';
   static String guardianChildren(String id) => '/api/guardians/$id/children';
+  static String linkChildToGuardian(String guardianId) =>
+      '/api/guardians/$guardianId/link-child';
+  static String unlinkChildFromGuardian(String guardianId, String childId) =>
+      '/api/guardians/$guardianId/unlink-child/$childId';
+
+  // Additional guardian endpoints from API documentation
+  static String updateGuardian(String id) => '/api/guardians/$id';
+  static String toggleGuardianStatus(String id) => '/api/guardians/$id/status';
+  static String generateGuardianQrCode(String id) =>
+      '/api/guardians/$id/qr-code';
+  static String generateGuardianRfidTag(String id) =>
+      '/api/guardians/$id/rfid-tag';
+
+  // Guardian search endpoints (based on backend API)
+  static String searchGuardiansByQr(String qrCode) =>
+      '/api/guardians?qrCode=$qrCode';
+  static String searchGuardiansByRfid(String rfidTag) =>
+      '/api/guardians?rfidTag=$rfidTag';
 
   // Attendance endpoints
   static const String attendance = '/api/attendance';
@@ -35,6 +53,14 @@ class ApiConstants {
       '/api/attendance/child/$childId';
   static const String activeAttendance = '/api/attendance/active';
   static const String attendanceStats = '/api/attendance/stats';
+
+  // Guardian-based attendance endpoints (based on backend API)
+  static const String guardianCheckin =
+      '/api/attendance/checkin'; // Same as regular checkin but with guardianId
+  static const String guardianCheckout =
+      '/api/attendance/checkout'; // Same as regular checkout but with guardianId
+  static String guardianCurrentCheckins(String guardianId) =>
+      '/api/attendance/guardian/$guardianId';
 
   // Service endpoints
   static const String services = '/api/services';

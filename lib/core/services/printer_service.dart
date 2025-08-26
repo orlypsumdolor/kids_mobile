@@ -78,7 +78,7 @@ class PrinterService {
       print('Mock Print - CHECK-IN STICKER');
       print('CHILD: ${child.fullName}');
       print('ID: ${child.id}');
-      print('GUARDIAN: ${child.guardianId}');
+      print('GUARDIAN: ${child.primaryGuardianId ?? 'No guardian'}');
       print('PICKUP CODE: ${session.pickupCode}');
       print('SERVICE: ${session.serviceSession}');
       print('TIME: ${_formatTime(session.checkinTime)}');

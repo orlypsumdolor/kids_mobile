@@ -1,14 +1,16 @@
 import '../../domain/entities/child.dart';
 import '../../domain/entities/checkin_session.dart';
+import '../../domain/entities/attendance_record.dart';
+import '../../domain/entities/guardian.dart';
 import '../../domain/repositories/checkin_repository.dart';
 import '../datasources/remote/api_service.dart';
 import '../datasources/local/database_helper.dart';
 import '../models/child_model.dart';
 import '../models/checkin_session_model.dart';
+import '../models/attendance_record_model.dart';
+import '../models/guardian_model.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
-import '../../domain/entities/attendance_record.dart';
-import '../models/attendance_record_model.dart';
 import 'package:dio/dio.dart';
 
 class CheckinRepositoryImpl implements CheckinRepository {
@@ -21,6 +23,190 @@ class CheckinRepositoryImpl implements CheckinRepository {
     required DatabaseHelper databaseHelper,
   })  : _apiService = apiService,
         _databaseHelper = databaseHelper;
+
+  // Guardian-based operations
+  @override
+  Future<Guardian?> getGuardianByQrCode(String qrCode) async {
+    try {
+      final response = await _apiService.getGuardianByQrCode(qrCode);
+
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final guardianData = response.data['data']['guardian'];
+        if (guardianData != null) {
+          final guardianModel = GuardianModel.fromJson(guardianData);
+          return guardianModel.toEntity();
+        }
+      }
+
+      return null;
+    } catch (e) {
+      print('Error getting guardian by QR code: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<Guardian?> getGuardianByRfidTag(String rfidTag) async {
+    try {
+      final response = await _apiService.getGuardianByRfidTag(rfidTag);
+
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final guardianData = response.data['data']['guardian'];
+        if (guardianData != null) {
+          final guardianModel = GuardianModel.fromJson(guardianData);
+          return guardianModel.toEntity();
+        }
+      }
+
+      return null;
+    } catch (e) {
+      print('Error getting guardian by RFID tag: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getGuardianWithChildren(
+      String guardianId) async {
+    try {
+      final response = await _apiService.getGuardianWithChildren(guardianId);
+
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final data = response.data['data'];
+        final guardianData = data['guardian'];
+        final childrenData = data['children'] as List<dynamic>?;
+
+        if (guardianData != null) {
+          final guardian = GuardianModel.fromJson(guardianData).toEntity();
+          final children = childrenData?.map((childJson) {
+                return ChildModel.fromJson(childJson).toEntity();
+              }).toList() ??
+              [];
+
+          return {
+            'guardian': guardian,
+            'children': children,
+          };
+        }
+      }
+
+      return null;
+    } catch (e) {
+      print('Error getting guardian with children: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<List<AttendanceRecord>> checkInChildren({
+    required String guardianId,
+    required String serviceId,
+    required List<String> childIds,
+  }) async {
+    try {
+      print('=== GUARDIAN CHECK-IN PROCESS START ===');
+      print('Guardian ID: $guardianId');
+      print('Service ID: $serviceId');
+      print('Child IDs: $childIds');
+
+      final response = await _apiService.checkInChildren(
+        guardianId: guardianId,
+        serviceId: serviceId,
+        childIds: childIds,
+      );
+
+      print('=== API RESPONSE ===');
+      print('Status Code: ${response.statusCode}');
+      print('Response Data: ${response.data}');
+
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final serverData = response.data['data'];
+        final recordsData = serverData['records'] as List<dynamic>?;
+
+        if (recordsData != null) {
+          final attendanceRecords = recordsData.map((recordJson) {
+            return AttendanceRecordModel.fromJson(recordJson).toEntity();
+          }).toList();
+
+          print('=== CHECK-IN COMPLETE ===');
+          print('Created ${attendanceRecords.length} attendance records');
+          return attendanceRecords;
+        } else {
+          throw Exception('No attendance records data in server response');
+        }
+      } else {
+        final errorMessage = response.data['message'] ?? 'Check-in failed';
+        throw Exception(errorMessage);
+      }
+    } catch (e) {
+      print('=== GUARDIAN CHECK-IN ERROR ===');
+      print('Error: $e');
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<AttendanceRecord>> checkOutChildren({
+    required String guardianId,
+    required List<String> childIds,
+  }) async {
+    try {
+      print('=== GUARDIAN CHECK-OUT PROCESS START ===');
+      print('Guardian ID: $guardianId');
+      print('Child IDs: $childIds');
+
+      final response = await _apiService.checkOutChildren(
+        guardianId: guardianId,
+        childIds: childIds,
+      );
+
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final serverData = response.data['data'];
+        final recordsData = serverData['records'] as List<dynamic>?;
+
+        if (recordsData != null) {
+          final attendanceRecords = recordsData.map((recordJson) {
+            return AttendanceRecordModel.fromJson(recordJson).toEntity();
+          }).toList();
+
+          print('=== CHECK-OUT COMPLETE ===');
+          print('Updated ${attendanceRecords.length} attendance records');
+          return attendanceRecords;
+        } else {
+          throw Exception('No attendance records data in server response');
+        }
+      } else {
+        final errorMessage = response.data['message'] ?? 'Check-out failed';
+        throw Exception(errorMessage);
+      }
+    } catch (e) {
+      print('=== GUARDIAN CHECK-OUT ERROR ===');
+      print('Error: $e');
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<AttendanceRecord>> getGuardianCurrentCheckins(
+      String guardianId) async {
+    try {
+      final response = await _apiService.getGuardianCurrentCheckins(guardianId);
+
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final recordsData = response.data['data']['records'] as List<dynamic>?;
+        if (recordsData != null) {
+          return recordsData.map((recordJson) {
+            return AttendanceRecordModel.fromJson(recordJson).toEntity();
+          }).toList();
+        }
+      }
+
+      return [];
+    } catch (e) {
+      print('Error getting guardian current check-ins: $e');
+      return [];
+    }
+  }
 
   @override
   Future<Child?> getChildByQrCode(String qrCode) async {
@@ -175,34 +361,6 @@ class CheckinRepositoryImpl implements CheckinRepository {
           print('Record data type: ${recordData.runtimeType}');
           print(
               'Record data keys: ${recordData is Map ? recordData.keys.toList() : 'Not a Map'}');
-
-          // Validate required fields exist
-          if (recordData is Map<String, dynamic>) {
-            final requiredFields = [
-              '_id',
-              'child',
-              'serviceSession',
-              'serviceDate',
-              'checkInTime',
-              'checkedInBy',
-              'createdAt',
-              'updatedAt'
-            ];
-            final missingFields = <String>[];
-
-            for (final field in requiredFields) {
-              if (!recordData.containsKey(field)) {
-                missingFields.add(field);
-              }
-            }
-
-            if (missingFields.isNotEmpty) {
-              print('WARNING: Missing required fields: $missingFields');
-              print('Available fields: ${recordData.keys.toList()}');
-            } else {
-              print('All required fields present');
-            }
-          }
 
           // Parse the server response into AttendanceRecordModel
           final attendanceModel = AttendanceRecordModel.fromJson(recordData);

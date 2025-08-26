@@ -2,67 +2,57 @@ import 'package:equatable/equatable.dart';
 
 class Guardian extends Equatable {
   final String id;
-  final String fullName;
+  final String guardianId;
+  final String firstName;
+  final String lastName;
+  final String contactNumber;
   final String email;
-  final String phone;
-  final String? address;
-  final String? emergencyContact;
-  final String pickupCode;
-  final DateTime? pickupCodeExpiry;
+  final String relationship;
+  final String? qrCode;
+  final String? rfidTag;
+  final List<String> linkedChildren;
   final bool isActive;
-  final List<String> children;
-  final String createdBy;
+  final String? createdBy;
   final String? updatedBy;
   final DateTime createdAt;
   final DateTime updatedAt;
 
   const Guardian({
     required this.id,
-    required this.fullName,
+    required this.guardianId,
+    required this.firstName,
+    required this.lastName,
+    required this.contactNumber,
     required this.email,
-    required this.phone,
-    this.address,
-    this.emergencyContact,
-    required this.pickupCode,
-    this.pickupCodeExpiry,
-    required this.isActive,
-    required this.children,
-    required this.createdBy,
+    required this.relationship,
+    this.qrCode,
+    this.rfidTag,
+    required this.linkedChildren,
+    this.isActive = true,
+    this.createdBy,
     this.updatedBy,
     required this.createdAt,
     required this.updatedAt,
   });
 
-  // Helper getters for backward compatibility
-  String get firstName {
-    if (fullName.isEmpty) return '';
-    final parts = fullName.split(' ');
-    return parts.isNotEmpty ? parts.first : '';
-  }
-  
-  String get lastName {
-    if (fullName.isEmpty) return '';
-    final parts = fullName.split(' ');
-    return parts.length > 1 ? parts.skip(1).join(' ') : '';
-  }
-
-  bool get isPickupCodeValid {
-    if (pickupCodeExpiry == null) return true;
-    return DateTime.now().isBefore(pickupCodeExpiry!);
-  }
+  String get fullName => '$firstName $lastName'.trim();
+  bool get hasQrCode => qrCode != null && qrCode!.isNotEmpty;
+  bool get hasRfidTag => rfidTag != null && rfidTag!.isNotEmpty;
+  bool get hasLinkedChildren => linkedChildren.isNotEmpty;
 
   @override
   List<Object?> get props => [
         id,
-        fullName,
+        guardianId,
+        firstName,
+        lastName,
+        contactNumber,
         email,
-        phone,
-        address,
-        emergencyContact,
-        pickupCode,
-        pickupCodeExpiry,
+        relationship,
+        qrCode,
+        rfidTag,
+        linkedChildren,
         isActive,
-        children,
         createdBy,
         updatedBy,
         createdAt,

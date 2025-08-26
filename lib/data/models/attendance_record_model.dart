@@ -3,126 +3,82 @@ import '../../domain/entities/attendance_record.dart';
 class AttendanceRecordModel {
   final String id;
   final String childId;
-  final String serviceSessionId;
-  final DateTime serviceDate;
+  final String guardianId; // Added guardian ID
+  final String serviceId;
   final DateTime checkInTime;
   final DateTime? checkOutTime;
-  final String checkedInBy;
-  final String? checkedOutBy;
-  final String? pickupCode;
-  final String? notes;
+  final String pickupCode;
+  final bool stickerPrinted;
+  final AttendanceStatus status;
   final DateTime createdAt;
   final DateTime updatedAt;
 
   AttendanceRecordModel({
     required this.id,
     required this.childId,
-    required this.serviceSessionId,
-    required this.serviceDate,
+    required this.guardianId, // Added
+    required this.serviceId,
     required this.checkInTime,
     this.checkOutTime,
-    required this.checkedInBy,
-    this.checkedOutBy,
-    this.pickupCode,
-    this.notes,
+    required this.pickupCode,
+    required this.stickerPrinted,
+    required this.status,
     required this.createdAt,
     required this.updatedAt,
   });
 
   factory AttendanceRecordModel.fromJson(Map<String, dynamic> json) {
-    try {
-      print('AttendanceRecordModel.fromJson called with: $json');
-
-      // Helper function to safely extract ID from object or string
-      String extractId(dynamic value, String fieldName) {
-        if (value == null) {
-          print('Warning: $fieldName is null');
-          return 'unknown_${fieldName}_id';
-        }
-        if (value is String) {
-          return value;
-        }
-        if (value is Map<String, dynamic>) {
-          return value['_id'] ?? 'unknown_${fieldName}_id';
-        }
-        print('Warning: $fieldName has unexpected type: ${value.runtimeType}');
-        return 'unknown_${fieldName}_id';
+    // Handle nested objects for childId, guardianId, and serviceId
+    String extractId(dynamic idField) {
+      if (idField is Map<String, dynamic>) {
+        final extractedId = idField['_id'] ?? idField['id'] ?? '';
+        print('🔍 Extracted ID from object: $extractedId (from: $idField)');
+        return extractedId;
+      } else if (idField is String) {
+        print('🔍 Using string ID directly: $idField');
+        return idField;
       }
-
-      // Helper function to safely parse DateTime
-      DateTime parseDateTime(dynamic value, String fieldName) {
-        if (value == null) {
-          print('Warning: $fieldName is null, using current time');
-          return DateTime.now();
-        }
-        try {
-          return DateTime.parse(value.toString());
-        } catch (e) {
-          print(
-              'Error parsing $fieldName: $value, error: $e, using current time');
-          return DateTime.now();
-        }
-      }
-
-      // Handle different API response structures
-      final id = json['_id'] ?? json['id'] ?? 'unknown_id';
-      final childId = extractId(json['child'], 'child');
-      final serviceSessionId =
-          extractId(json['serviceSession'], 'serviceSession');
-      final serviceDate = parseDateTime(json['serviceDate'], 'serviceDate');
-      final checkInTime = parseDateTime(json['checkInTime'], 'checkInTime');
-      final checkOutTime = json['checkOutTime'] != null
-          ? parseDateTime(json['checkOutTime'], 'checkOutTime')
-          : null;
-      final checkedInBy = extractId(json['checkedInBy'], 'checkedInBy');
-      final checkedOutBy = json['checkedOutBy'] != null
-          ? extractId(json['checkedOutBy'], 'checkedOutBy')
-          : null;
-
-      // Handle optional fields that might not be present in the API response
-      final pickupCode = json['pickupCode'] ?? json['pickup_code'];
-      final notes = json['notes'] ?? json['note'];
-
-      final createdAt = parseDateTime(json['createdAt'], 'createdAt');
-      final updatedAt = parseDateTime(json['updatedAt'], 'updatedAt');
-
-      final model = AttendanceRecordModel(
-        id: id,
-        childId: childId,
-        serviceSessionId: serviceSessionId,
-        serviceDate: serviceDate,
-        checkInTime: checkInTime,
-        checkOutTime: checkOutTime,
-        checkedInBy: checkedInBy,
-        checkedOutBy: checkedOutBy,
-        pickupCode: pickupCode,
-        notes: notes,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-      );
-
-      print('Successfully created AttendanceRecordModel: $model');
-      return model;
-    } catch (e, stackTrace) {
-      print('Error in AttendanceRecordModel.fromJson: $e');
-      print('Stack trace: $stackTrace');
-      print('JSON data: $json');
-      rethrow;
+      print('⚠️ Unknown ID field type: ${idField.runtimeType}');
+      return '';
     }
+
+    return AttendanceRecordModel(
+      id: json['_id'] ?? json['id'] ?? '',
+      childId: extractId(json['childId']),
+      guardianId: extractId(json['guardianId']),
+      serviceId: extractId(json['serviceId']),
+      checkInTime: json['checkInTime'] != null
+          ? DateTime.parse(json['checkInTime'])
+          : DateTime.now(),
+      checkOutTime: json['checkOutTime'] != null
+          ? DateTime.parse(json['checkOutTime'])
+          : null,
+      pickupCode: json['pickupCode'] ?? '',
+      stickerPrinted: json['stickerPrinted'] ?? false,
+      status: json['status'] == 'checked-out'
+          ? AttendanceStatus.checkedOut
+          : AttendanceStatus.checkedIn,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : DateTime.now(),
+    );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'child': childId,
-      'serviceSession': serviceSessionId,
-      'serviceDate': serviceDate.toIso8601String(),
+      'childId': childId,
+      'guardianId': guardianId, // Added
+      'serviceId': serviceId,
       'checkInTime': checkInTime.toIso8601String(),
       'checkOutTime': checkOutTime?.toIso8601String(),
-      'checkedInBy': checkedInBy,
-      'checkedOutBy': checkedOutBy,
       'pickupCode': pickupCode,
-      'notes': notes,
+      'stickerPrinted': stickerPrinted,
+      'status':
+          status == AttendanceStatus.checkedOut ? 'checked-out' : 'checked-in',
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -132,22 +88,15 @@ class AttendanceRecordModel {
     return AttendanceRecord(
       id: id,
       childId: childId,
-      serviceSessionId: serviceSessionId,
-      serviceDate: serviceDate,
+      guardianId: guardianId, // Added
+      serviceId: serviceId,
       checkInTime: checkInTime,
       checkOutTime: checkOutTime,
-      checkedInBy: checkedInBy,
-      checkedOutBy: checkedOutBy,
       pickupCode: pickupCode,
-      notes: notes,
+      stickerPrinted: stickerPrinted,
+      status: status,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
   }
-
-  // Helper getters for backward compatibility
-  String get serviceId => serviceSessionId;
-  String get volunteerId => checkedInBy;
-  String get status => checkOutTime != null ? 'completed' : 'active';
-  bool get isSynced => true; // Always synced when coming from API
 }

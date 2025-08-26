@@ -100,6 +100,7 @@ Future<void> configureDependencies() async {
         generatePickupCodeUseCase: getIt(),
         cameraService: getIt(),
         printerService: getIt(),
+        apiService: getIt(),
       ));
   getIt.registerFactory<CheckoutProvider>(() => CheckoutProvider(
         checkOutChildUseCase: getIt(),

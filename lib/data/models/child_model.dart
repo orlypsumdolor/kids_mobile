@@ -6,7 +6,7 @@ class ChildModel {
   final DateTime dateOfBirth;
   final String gender;
   final String ageGroup;
-  final String guardianId;
+  final List<String> guardianIds; // Changed from single guardianId to list
   final EmergencyContactModel? emergencyContact;
   final String? specialNotes;
   final String? qrCode;
@@ -26,7 +26,7 @@ class ChildModel {
     required this.dateOfBirth,
     required this.gender,
     required this.ageGroup,
-    required this.guardianId,
+    required this.guardianIds, // Updated parameter
     this.emergencyContact,
     this.specialNotes,
     this.qrCode,
@@ -45,13 +45,21 @@ class ChildModel {
     try {
       print('ChildModel.fromJson called with: $json');
 
-      // Extract guardian ID safely
-      String? guardianId;
+      // Extract guardian IDs safely - support both single and multiple guardians
+      List<String> guardianIds = [];
       if (json['guardian'] != null) {
         if (json['guardian'] is String) {
-          guardianId = json['guardian'];
+          guardianIds = [json['guardian']];
+        } else if (json['guardian'] is List) {
+          guardianIds = List<String>.from(json['guardian']);
         } else if (json['guardian'] is Map) {
-          guardianId = json['guardian']['_id'];
+          guardianIds = [json['guardian']['_id']];
+        }
+      } else if (json['guardianIds'] != null) {
+        if (json['guardianIds'] is List) {
+          guardianIds = List<String>.from(json['guardianIds']);
+        } else if (json['guardianIds'] is String) {
+          guardianIds = [json['guardianIds']];
         }
       }
 
@@ -83,7 +91,7 @@ class ChildModel {
             : DateTime.now(),
         gender: json['gender'] ?? '',
         ageGroup: json['ageGroup'] ?? '',
-        guardianId: guardianId ?? '',
+        guardianIds: guardianIds, // Updated
         emergencyContact: json['emergencyContact'] != null
             ? EmergencyContactModel.fromJson(json['emergencyContact'])
             : null,
@@ -125,7 +133,7 @@ class ChildModel {
       'date_of_birth': dateOfBirth.toIso8601String(),
       'gender': gender,
       'age_group': ageGroup,
-      'guardian_id': guardianId,
+      'guardian_ids': guardianIds, // Updated
       'emergency_contact': emergencyContact?.toJson().toString(),
       'special_notes': specialNotes,
       'qr_code': qrCode,
@@ -148,7 +156,7 @@ class ChildModel {
       dateOfBirth: dateOfBirth,
       gender: gender,
       ageGroup: ageGroup,
-      guardianId: guardianId,
+      guardianIds: guardianIds, // Updated
       emergencyContact: emergencyContact?.toEntity(),
       specialNotes: specialNotes,
       qrCode: qrCode,
@@ -178,6 +186,9 @@ class ChildModel {
   }
 
   String get rfidCode => rfidTag ?? '';
+
+  // Backward compatibility for single guardian
+  String? get guardianId => guardianIds.isNotEmpty ? guardianIds.first : null;
 }
 
 class EmergencyContactModel {

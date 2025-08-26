@@ -6,7 +6,7 @@ class Child extends Equatable {
   final DateTime dateOfBirth;
   final String gender;
   final String ageGroup;
-  final String guardianId;
+  final List<String> guardianIds; // Changed from single guardianId to list
   final EmergencyContact? emergencyContact;
   final String? specialNotes;
   final String? qrCode;
@@ -26,7 +26,7 @@ class Child extends Equatable {
     required this.dateOfBirth,
     required this.gender,
     required this.ageGroup,
-    required this.guardianId,
+    required this.guardianIds, // Updated parameter
     this.emergencyContact,
     this.specialNotes,
     this.qrCode,
@@ -70,6 +70,11 @@ class Child extends Equatable {
   bool get hasSpecialNotes => specialNotes != null && specialNotes!.isNotEmpty;
   bool get hasEmergencyContact => emergencyContact != null;
 
+  // New helper getters for guardian support
+  bool get hasGuardians => guardianIds.isNotEmpty;
+  String? get primaryGuardianId =>
+      guardianIds.isNotEmpty ? guardianIds.first : null;
+
   @override
   List<Object?> get props => [
         id,
@@ -77,7 +82,7 @@ class Child extends Equatable {
         dateOfBirth,
         gender,
         ageGroup,
-        guardianId,
+        guardianIds, // Updated
         emergencyContact,
         specialNotes,
         qrCode,
