@@ -25,18 +25,16 @@ class RoleBasedNavigation extends StatelessWidget {
 
             // Scanner/Volunteer Actions
             if (user.canScan) ...[
+              Text(
+                'Check-In & Check-Out',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+              ),
+              const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(
-                    child: _ActionCard(
-                      title: 'Check Out',
-                      subtitle: 'Verify pickup code',
-                      icon: Icons.logout,
-                      color: Theme.of(context).colorScheme.secondary,
-                      onTap: () => context.push(AppRouter.checkout),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
                     child: _ActionCard(
                       title: 'Guardian Check-In',
@@ -47,13 +45,31 @@ class RoleBasedNavigation extends StatelessWidget {
                       onTap: () => context.push(AppRouter.guardianCheckin),
                     ),
                   ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _ActionCard(
+                      title: 'Check Out',
+                      subtitle: 'Verify pickup code',
+                      icon: Icons.logout,
+                      color: Theme.of(context).colorScheme.secondary,
+                      onTap: () => context.push(AppRouter.checkout),
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
             ],
 
             // Admin/Staff Actions
             if (user.canViewReports) ...[
+              Text(
+                'Reports & Analytics',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+              ),
+              const SizedBox(height: 12),
               _ActionCard(
                 title: 'Attendance Summary',
                 subtitle: 'View today\'s attendance',
@@ -62,11 +78,19 @@ class RoleBasedNavigation extends StatelessWidget {
                 onTap: () => context.push(AppRouter.attendanceSummary),
                 isFullWidth: true,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
             ],
 
             // Admin Only Actions
             if (user.canManageUsers) ...[
+              Text(
+                'Administration',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+              ),
+              const SizedBox(height: 12),
               _ActionCard(
                 title: 'Settings',
                 subtitle: 'Manage app settings',
@@ -103,22 +127,30 @@ class _ActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 2,
+      elevation: 4,
+      shadowColor: color.withOpacity(0.3),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           child: isFullWidth
               ? Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
+                        color: color.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: color.withOpacity(0.3),
+                          width: 1,
+                        ),
                       ),
-                      child: Icon(icon, color: color, size: 24),
+                      child: Icon(icon, color: color, size: 28),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -153,28 +185,36 @@ class _ActionCard extends StatelessWidget {
               : Column(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        color: color.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: color.withOpacity(0.3),
+                          width: 1,
+                        ),
                       ),
-                      child: Icon(icon, color: color, size: 32),
+                      child: Icon(icon, color: color, size: 36),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Text(
                       title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
+                            color: color,
                           ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Text(
                       subtitle,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Colors.grey[600],
+                            height: 1.3,
                           ),
                       textAlign: TextAlign.center,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
