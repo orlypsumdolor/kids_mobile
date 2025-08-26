@@ -354,7 +354,7 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
   }
 
   Future<void> _printStickers(List<AttendanceRecord> records) async {
-    print('🖨️ Starting to print stickers for ${records.length} children');
+    print('��️ Starting to print sticker for ${records.length} children');
 
     setState(() {
       _isPrinting = true;
@@ -408,8 +408,28 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
         }
       }
 
-      // Print stickers for each child
-      for (final record in records) {
+      // Get service name
+      final servicesProvider = context.read<ServicesProvider>();
+      final service = servicesProvider.services.firstWhere(
+        (s) => s.id == records.first.serviceId,
+        orElse: () => ServiceSession(
+          id: records.first.serviceId,
+          name: 'Unknown Service',
+          startTime: '00:00',
+          endTime: '00:00',
+          dayOfWeek: 'unknown',
+          description: '',
+          ageGroups: const [],
+          maxCapacity: 0,
+          isActive: true,
+          createdBy: 'system',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+
+      // Prepare data for printing
+      final childrenNames = records.map((record) {
         final child = _linkedChildren.firstWhere(
           (c) => c.id == record.childId,
           orElse: () => Child(
@@ -423,67 +443,48 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
             currentlyCheckedIn: false,
           ),
         );
+        return '${child.firstName} ${child.lastName}';
+      }).toList();
 
-        // Get service name
-        final servicesProvider = context.read<ServicesProvider>();
-        final service = servicesProvider.services.firstWhere(
-          (s) => s.id == record.serviceId,
-          orElse: () => ServiceSession(
-            id: record.serviceId,
-            name: 'Unknown Service',
-            startTime: '00:00',
-            endTime: '00:00',
-            dayOfWeek: 'unknown',
-            description: '',
-            ageGroups: const [],
-            maxCapacity: 0,
-            isActive: true,
-            createdBy: 'system',
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ),
-        );
+      final pickupCodes = records.map((record) => record.pickupCode).toList();
 
-        print('🎫 Printing sticker for ${child.fullName}...');
-        print('   📍 Pickup Code: ${record.pickupCode}');
-        print('   👤 Guardian: ${_scannedGuardian?.fullName}');
-        print('   ⛪ Service: ${service.name}');
-        print('   🕐 Check-in Time: ${record.checkInTime}');
+      print('🎫 Printing sticker for ${childrenNames.length} children...');
+      print('   👶 Children: ${childrenNames.join(', ')}');
+      print('   📍 Pickup Codes: ${pickupCodes.join(', ')}');
+      print('   👤 Guardian: ${_scannedGuardian?.fullName}');
+      print('   ⛪ Service: ${service.name}');
+      print('   🕐 Check-in Time: ${records.first.checkInTime}');
 
-        // Print the actual sticker
-        final success = await printerService.printGuardianCheckInSticker(
-          childName: child.fullName,
-          pickupCode: record.pickupCode,
-          guardianQrCode: _scannedGuardian?.id ?? 'Unknown',
-          serviceName: service.name,
-          checkInTime: record.checkInTime,
-        );
+      // Print the single sticker with all children
+      final success = await printerService.printGuardianCheckInSticker(
+        children: childrenNames,
+        pickupCodes: pickupCodes,
+        guardianQrCode: _scannedGuardian?.id ?? 'Unknown',
+        serviceName: service.name,
+        checkInTime: records.first.checkInTime,
+      );
 
-        if (success) {
-          print('✅ Sticker printed successfully for ${child.fullName}');
-        } else {
-          print('❌ Failed to print sticker for ${child.fullName}');
-        }
-
-        // Small delay between prints
-        await Future.delayed(const Duration(milliseconds: 500));
+      if (success) {
+        print('✅ Sticker printed successfully for all children');
+      } else {
+        print('❌ Failed to print sticker');
       }
 
-      print('🎉 All stickers printed successfully!');
+      print('🎉 Sticker printing completed!');
 
       // Show success message to user
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text('✅ Successfully printed ${records.length} sticker(s)!'),
+            content: Text(
+                '✅ Successfully printed sticker for ${records.length} child(ren)!'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
-      print('💥 Error printing stickers: $e');
+      print('💥 Error printing sticker: $e');
       // Show error to user but don't fail the check-in process
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -567,8 +567,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
       // For testing, we'll use the guardian check-in sticker method
       final success = await _printerService.printGuardianCheckInSticker(
-        childName: mockChild.fullName,
-        pickupCode: 'TEST123',
+        children: [mockChild.fullName],
+        pickupCodes: ['TEST123'],
         guardianQrCode: 'GUARDIAN-001',
         serviceName: mockSession.serviceSessionId,
         checkInTime: DateTime.now(),

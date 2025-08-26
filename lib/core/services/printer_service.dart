@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui' as ui;
+import 'dart:convert';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
@@ -524,8 +525,8 @@ If permissions are still denied, you may need to:
 
   /// Print guardian-based check-in sticker with pickup code, QR code, and child info
   Future<bool> printGuardianCheckInSticker({
-    required String childName,
-    required String pickupCode,
+    required List<String> children,
+    required List<String> pickupCodes,
     required String guardianQrCode,
     required String serviceName,
     required DateTime checkInTime,
@@ -535,12 +536,12 @@ If permissions are still denied, you may need to:
     }
 
     try {
-      print('🖨️ Printing guardian check-in sticker for $childName...');
+      print('🖨️ Printing guardian check-in sticker for $children...');
 
       // Create ESC/POS commands for the guardian check-in sticker
       final commands = await _createGuardianCheckInStickerCommands(
-        childName: childName,
-        pickupCode: pickupCode,
+        children: children,
+        pickupCodes: pickupCodes,
         guardianQrCode: guardianQrCode,
         serviceName: serviceName,
         checkInTime: checkInTime,
@@ -629,8 +630,8 @@ If permissions are still denied, you may need to:
 
   /// Create ESC/POS commands for guardian check-in sticker
   Future<List<int>> _createGuardianCheckInStickerCommands({
-    required String childName,
-    required String pickupCode,
+    required List<String> children,
+    required List<String> pickupCodes,
     required String guardianQrCode,
     required String serviceName,
     required DateTime checkInTime,
@@ -648,24 +649,33 @@ If permissions are still denied, you may need to:
     commands.addAll([27, 33, 16]); // ESC ! 16 - Bold text
     commands.addAll(_textToBytes('GUARDIAN PICKUP SLIP\n\n'));
 
-    // Child name (prominent)
-    commands.addAll([27, 33, 16]); // ESC ! 16 - Bold text
-    commands.addAll(_textToBytes('CHILD:\n'));
-    commands.addAll([27, 33, 48]); // ESC ! 48 - Double height and width
-    commands.addAll(_textToBytes('$childName\n\n'));
+    // Child name loop to print the names of the children
+    for (int i = 0; i < children.length; i++) {
+      commands.addAll([27, 33, 16]); // ESC ! 16 - Bold text
+      commands.addAll(_textToBytes('CHILD:\n'));
+      commands.addAll([27, 33, 48]); // ESC ! 48 - Double height and width
+      commands.addAll(_textToBytes('${children[i]}\n\n'));
+    }
 
-    // Pickup code (very large and bold)
-    commands.addAll([27, 33, 16]); // ESC ! 16 - Bold text
-    commands.addAll(_textToBytes('PICKUP CODE:\n'));
-    commands.addAll([27, 33, 56]); // ESC ! 56 - Double height, width, and bold
-    commands.addAll(_textToBytes('$pickupCode\n\n'));
+    // Pickup code loop to print the pickup codes of the children
+    for (int i = 0; i < pickupCodes.length; i++) {
+      commands.addAll([27, 33, 16]); // ESC ! 16 - Bold text
+      commands.addAll(_textToBytes('PICKUP CODE:\n'));
+      commands.addAll([27, 33, 48]); // ESC ! 48 - Double height and width
+      commands.addAll(_textToBytes('${pickupCodes[i]}\n\n'));
+    }
 
     // Add spacing and center the QR code
     commands.addAll([27, 97, 1]); // ESC a 1 - Center alignment
     commands.addAll(_textToBytes('\n')); // Extra spacing
 
-    // Add QR code bitmap commands
-    final qrData = '$guardianQrCode|$pickupCode';
+    // format should be on jsonstring format
+    final qrData = json.encode({
+      'guardianQrCode': guardianQrCode,
+      'pickupCodes': pickupCodes,
+      'children': children,
+    });
+
     final qrImage = await _generateQRCodeImage(qrData, size: 256);
     final qrCommands = await _imageToEscPosCommands(qrImage);
     commands.addAll(qrCommands);
