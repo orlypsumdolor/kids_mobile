@@ -7,7 +7,9 @@ import '../../widgets/child_selection_card.dart';
 import '../../../domain/entities/guardian.dart';
 import '../../../domain/entities/child.dart';
 import '../../../domain/entities/attendance_record.dart';
+import '../../../domain/entities/service_session.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/services/printer_service.dart';
 import '../../../data/models/guardian_model.dart';
 import '../../../data/models/child_model.dart';
 
@@ -24,6 +26,7 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
   List<String> _selectedChildIds = [];
   bool _isLoading = false;
   bool _isScanning = false;
+  bool _isPrinting = false;
   String? _error;
   String? _successMessage;
   String? _selectedServiceId;
@@ -351,33 +354,151 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
   }
 
   Future<void> _printStickers(List<AttendanceRecord> records) async {
-    print('🖨️ Preparing to print stickers for ${records.length} children');
+    print('🖨️ Starting to print stickers for ${records.length} children');
 
-    for (final record in records) {
-      final child = _linkedChildren.firstWhere(
-        (c) => c.id == record.childId,
-        orElse: () => Child(
-          id: record.childId,
-          fullName: 'Unknown Child',
-          dateOfBirth: DateTime.now(),
-          gender: 'unknown',
-          ageGroup: 'unknown',
-          guardianIds: const [],
-          isActive: true,
-          currentlyCheckedIn: false,
-        ),
-      );
+    setState(() {
+      _isPrinting = true;
+    });
 
-      print('🎫 Sticker for ${child.fullName}:');
-      print('   📍 Pickup Code: ${record.pickupCode}');
-      print('   👤 Guardian: ${_scannedGuardian?.fullName}');
-      print('   ⛪ Service: $_selectedServiceId');
-      print('   🕐 Check-in Time: ${record.checkInTime}');
+    try {
+      // Get the printer service
+      final printerService = context.read<PrinterService>();
+
+      // Check if printer is connected
+      if (!printerService.isConnected) {
+        print('⚠️ Printer not connected. Checking for saved connection...');
+
+        // Check if there's a saved printer connection first
+        final savedDevice = printerService.connectedDevice;
+        if (savedDevice != null) {
+          print(
+              '🔄 Found saved printer: ${savedDevice.name}. Attempting to reconnect...');
+          final connected = await printerService.connect(savedDevice);
+          if (connected) {
+            print(
+                '✅ Successfully reconnected to saved printer: ${savedDevice.name}');
+          } else {
+            print(
+                '❌ Failed to reconnect to saved printer: ${savedDevice.name}');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      '⚠️ Failed to reconnect to saved printer: ${savedDevice.name}. Please check printer connection in Settings.'),
+                  backgroundColor: Colors.orange,
+                  duration: const Duration(seconds: 5),
+                ),
+              );
+            }
+            return;
+          }
+        } else {
+          print('❌ No saved printer connection found');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    '⚠️ No printer connected. Please connect a printer in Settings first.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      // Print stickers for each child
+      for (final record in records) {
+        final child = _linkedChildren.firstWhere(
+          (c) => c.id == record.childId,
+          orElse: () => Child(
+            id: record.childId,
+            fullName: 'Unknown Child',
+            dateOfBirth: DateTime.now(),
+            gender: 'unknown',
+            ageGroup: 'unknown',
+            guardianIds: const [],
+            isActive: true,
+            currentlyCheckedIn: false,
+          ),
+        );
+
+        // Get service name
+        final servicesProvider = context.read<ServicesProvider>();
+        final service = servicesProvider.services.firstWhere(
+          (s) => s.id == record.serviceId,
+          orElse: () => ServiceSession(
+            id: record.serviceId,
+            name: 'Unknown Service',
+            startTime: '00:00',
+            endTime: '00:00',
+            dayOfWeek: 'unknown',
+            description: '',
+            ageGroups: const [],
+            maxCapacity: 0,
+            isActive: true,
+            createdBy: 'system',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+
+        print('🎫 Printing sticker for ${child.fullName}...');
+        print('   📍 Pickup Code: ${record.pickupCode}');
+        print('   👤 Guardian: ${_scannedGuardian?.fullName}');
+        print('   ⛪ Service: ${service.name}');
+        print('   🕐 Check-in Time: ${record.checkInTime}');
+
+        // Print the actual sticker
+        final success = await printerService.printGuardianCheckInSticker(
+          childName: child.fullName,
+          pickupCode: record.pickupCode,
+          guardianQrCode: _scannedGuardian?.id ?? 'Unknown',
+          serviceName: service.name,
+          checkInTime: record.checkInTime,
+        );
+
+        if (success) {
+          print('✅ Sticker printed successfully for ${child.fullName}');
+        } else {
+          print('❌ Failed to print sticker for ${child.fullName}');
+        }
+
+        // Small delay between prints
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      print('🎉 All stickers printed successfully!');
+
+      // Show success message to user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('✅ Successfully printed ${records.length} sticker(s)!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      print('💥 Error printing stickers: $e');
+      // Show error to user but don't fail the check-in process
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Warning: Sticker printing failed: $e'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      setState(() {
+        _isPrinting = false;
+      });
     }
-
-    // TODO: Implement actual sticker printing with PrinterService
-    // For now, just log the information
-    print('✅ Sticker information prepared successfully');
   }
 
   void _setError(String error) {
@@ -710,6 +831,42 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
                 ],
               ),
             ),
+
+            // Printing status indicator
+            if (_isPrinting) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue[200]!),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(Colors.blue[700]!),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '🖨️ Printing stickers... Please wait',
+                        style: TextStyle(
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
 
           if (_error != null) ...[

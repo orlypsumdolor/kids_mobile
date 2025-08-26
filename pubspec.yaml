@@ -39,8 +39,10 @@ dependencies:
   # nfc_manager: ^3.3.0
   
   # Printing
-  # blue_thermal_printer: ^1.2.2  # Temporarily disabled due to namespace issues
-  # esc_pos_utils: ^1.1.0         # Will implement mock printer service
+  print_bluetooth_thermal: ^1.1.6
+  esc_pos_utils: ^1.1.0
+  image: ^3.3.0
+  flutter_blue_plus: ^1.31.15  # Added for Bluetooth device scanning
   
   # Utils
   uuid: ^4.1.0
@@ -52,6 +54,7 @@ dependencies:
   cupertino_icons: ^1.0.2
   flutter_svg: ^2.0.7
   lottie: ^2.7.0
+  # flutter_bluetooth_printer: ^2.9.1  # Removed due to compilation issues
 
 dev_dependencies:
   flutter_test:
