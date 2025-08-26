@@ -106,6 +106,8 @@ Future<void> configureDependencies() async {
         checkOutChildUseCase: getIt(),
         verifyPickupCodeUseCase: getIt(),
         cameraService: getIt(),
+        checkinProvider: getIt(),
+        apiService: getIt(),
       ));
   getIt.registerFactory<ServicesProvider>(() => ServicesProvider(
         getServiceSessionsUseCase: getIt(),

@@ -448,6 +448,8 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
 
       final pickupCodes = records.map((record) => record.pickupCode).toList();
 
+      final childIds = records.map((record) => record.childId).toList();
+
       print('🎫 Printing sticker for ${childrenNames.length} children...');
       print('   👶 Children: ${childrenNames.join(', ')}');
       print('   📍 Pickup Codes: ${pickupCodes.join(', ')}');
@@ -457,6 +459,7 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
 
       // Print the single sticker with all children
       final success = await printerService.printGuardianCheckInSticker(
+        childIds: childIds,
         children: childrenNames,
         pickupCodes: pickupCodes,
         guardianQrCode: _scannedGuardian?.id ?? 'Unknown',

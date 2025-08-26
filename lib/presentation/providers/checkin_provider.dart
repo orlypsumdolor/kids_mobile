@@ -244,16 +244,19 @@ class CheckinProvider extends ChangeNotifier {
   Future<List<AttendanceRecord>> checkOutChildren({
     required String guardianId,
     required List<String> childIds,
+    required List<String> pickupCodes,
   }) async {
     try {
       print('🚀 Starting check-out process for ${childIds.length} children');
       print('👤 Guardian ID: $guardianId');
       print('👶 Child IDs: $childIds');
+      print('🎫 Pickup Codes: $pickupCodes');
 
       // Call the API service to check out multiple children
       final response = await _apiService.checkOutChildren(
         guardianId: guardianId,
         childIds: childIds,
+        pickupCodes: pickupCodes,
       );
 
       if (_apiService.isSuccess(response)) {

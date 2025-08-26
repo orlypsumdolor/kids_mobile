@@ -20,6 +20,7 @@ abstract class CheckinRepository {
   Future<List<AttendanceRecord>> checkOutChildren({
     required String guardianId,
     required List<String> childIds,
+    required List<String> pickupCodes,
   });
 
   // Get current checked-in children for a guardian

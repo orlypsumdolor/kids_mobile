@@ -525,6 +525,7 @@ If permissions are still denied, you may need to:
 
   /// Print guardian-based check-in sticker with pickup code, QR code, and child info
   Future<bool> printGuardianCheckInSticker({
+    required List<String> childIds,
     required List<String> children,
     required List<String> pickupCodes,
     required String guardianQrCode,
@@ -540,6 +541,7 @@ If permissions are still denied, you may need to:
 
       // Create ESC/POS commands for the guardian check-in sticker
       final commands = await _createGuardianCheckInStickerCommands(
+        childIds: childIds,
         children: children,
         pickupCodes: pickupCodes,
         guardianQrCode: guardianQrCode,
@@ -630,6 +632,7 @@ If permissions are still denied, you may need to:
 
   /// Create ESC/POS commands for guardian check-in sticker
   Future<List<int>> _createGuardianCheckInStickerCommands({
+    required List<String> childIds,
     required List<String> children,
     required List<String> pickupCodes,
     required String guardianQrCode,
@@ -673,7 +676,7 @@ If permissions are still denied, you may need to:
     final qrData = json.encode({
       'guardianQrCode': guardianQrCode,
       'pickupCodes': pickupCodes,
-      'children': children,
+      'childIds': childIds,
     });
 
     final qrImage = await _generateQRCodeImage(qrData, size: 256);

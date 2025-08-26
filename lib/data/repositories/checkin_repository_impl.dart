@@ -149,15 +149,18 @@ class CheckinRepositoryImpl implements CheckinRepository {
   Future<List<AttendanceRecord>> checkOutChildren({
     required String guardianId,
     required List<String> childIds,
+    required List<String> pickupCodes,
   }) async {
     try {
       print('=== GUARDIAN CHECK-OUT PROCESS START ===');
       print('Guardian ID: $guardianId');
       print('Child IDs: $childIds');
+      print('Pickup Codes: $pickupCodes');
 
       final response = await _apiService.checkOutChildren(
         guardianId: guardianId,
         childIds: childIds,
+        pickupCodes: pickupCodes,
       );
 
       if (response.data['success'] == true && response.data['data'] != null) {

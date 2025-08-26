@@ -249,10 +249,12 @@ class ApiService {
   Future<Response> checkOutChildren({
     required String guardianId,
     required List<String> childIds,
+    required List<String> pickupCodes,
   }) async {
     return await _dio.post(ApiConstants.guardianCheckout, data: {
       'guardianId': guardianId,
       'childIds': childIds,
+      'pickupCodes': pickupCodes,
     });
   }
 

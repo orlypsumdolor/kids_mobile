@@ -39,7 +39,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         foregroundColor: Colors.white,
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -120,14 +120,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Pickup Code Input
-              PickupCodeInput(
-                controller: _pickupCodeController,
-                onSubmit: (code) => _handlePickupCodeEntry(code),
-              ),
-              const SizedBox(height: 20),
-
               // Status Display
               Consumer<CheckoutProvider>(
                 builder: (context, provider, child) {
@@ -224,6 +216,77 @@ class _CheckoutPageState extends State<CheckoutPage> {
                     );
                   }
 
+                  // Show scanned QR data if available
+                  if (provider.scannedQrData != null) {
+                    final qrData = provider.scannedQrData!;
+                    return Card(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.1),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.qr_code,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  size: 32,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Scanned Check-in Sticker',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            _buildInfoRow(
+                                'Guardian ID', qrData['guardianQrCode']),
+                            _buildInfoRow(
+                                'Children',
+                                provider.childInfo != null
+                                    ? provider.childInfo!
+                                        .map((c) => c['name'])
+                                        .join(', ')
+                                    : (qrData['childIds'] as List).join(', ')),
+                            _buildInfoRow('Pickup Codes',
+                                (qrData['pickupCodes'] as List).join(', ')),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () => provider.clearSession(),
+                                    child: const Text('Clear'),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () => _performCheckout(),
+                                    child: const Text('Check Out'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
                   return const SizedBox.shrink();
                 },
               ),
@@ -238,9 +301,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
     context.push(AppRouter.qrScanner, extra: {
       'onScanComplete': (String qrCode) {
         // Handle QR code scan for checkout
-        _processChildScan(qrCode, isQR: true);
+        _processQrCodeScan(qrCode);
       },
-      'title': 'Scan Child QR Code',
+      'title': 'Scan Check-in Sticker',
     });
   }
 
@@ -341,5 +404,55 @@ class _CheckoutPageState extends State<CheckoutPage> {
       checkoutProvider.checkOutChild(
           'mock-session-id', authProvider.currentUser!.id);
     }
+  }
+
+  void _processQrCodeScan(String qrCode) {
+    final checkoutProvider = context.read<CheckoutProvider>();
+
+    // Process the QR code
+    checkoutProvider.processQrCodeScan(qrCode).then((success) {
+      if (success) {
+        // Success - the UI will update automatically
+        print('QR code processed successfully');
+      }
+    });
+  }
+
+  void _performCheckout() {
+    final checkoutProvider = context.read<CheckoutProvider>();
+
+    checkoutProvider.checkOutChildrenFromQr().then((success) {
+      if (success) {
+        // Success message will be shown by the provider
+        _pickupCodeController.clear();
+      }
+    });
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
