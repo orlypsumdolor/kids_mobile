@@ -25,37 +25,29 @@ class ServiceRepositoryImpl implements ServiceRepository {
           print('Error: services field is null in response data');
           throw Exception('Invalid data structure: services field is missing');
         }
-        
+
         final List<dynamic> servicesData = data['services'];
-        
+
         // Add logging to debug the response structure
         print('Services data received: ${servicesData.length} services');
         if (servicesData.isNotEmpty) {
           print('First service data: ${servicesData.first}');
         }
-        
-        // Validate that servicesData is actually a list
-        if (servicesData is! List) {
-          print('Error: servicesData is not a list: ${servicesData.runtimeType}');
-          throw Exception('Invalid data structure: services is not a list');
-        }
-        
-        return servicesData
-            .map((json) {
-              try {
-                // Validate that each item is a Map
-                if (json is! Map<String, dynamic>) {
-                  print('Error: service item is not a Map: ${json.runtimeType}');
-                  throw Exception('Invalid service data structure');
-                }
-                return ServiceSessionModel.fromJson(json).toEntity();
-              } catch (e) {
-                print('Error parsing service: $e');
-                print('Service JSON: $json');
-                rethrow;
-              }
-            })
-            .toList();
+
+        return servicesData.map((json) {
+          try {
+            // Validate that each item is a Map
+            if (json is! Map<String, dynamic>) {
+              print('Error: service item is not a Map: ${json.runtimeType}');
+              throw Exception('Invalid service data structure');
+            }
+            return ServiceSessionModel.fromJson(json).toEntity();
+          } catch (e) {
+            print('Error parsing service: $e');
+            print('Service JSON: $json');
+            rethrow;
+          }
+        }).toList();
       }
 
       return [];

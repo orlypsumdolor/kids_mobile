@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:async';
 import '../../providers/checkin_provider.dart';
 import '../../providers/services_provider.dart';
 import '../../widgets/child_selection_card.dart';
@@ -20,7 +21,8 @@ class GuardianCheckinPage extends StatefulWidget {
   State<GuardianCheckinPage> createState() => _GuardianCheckinPageState();
 }
 
-class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
+class _GuardianCheckinPageState extends State<GuardianCheckinPage>
+    with WidgetsBindingObserver {
   Guardian? _scannedGuardian;
   List<Child> _linkedChildren = [];
   List<String> _selectedChildIds = [];
@@ -30,11 +32,48 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
   String? _error;
   String? _successMessage;
   String? _selectedServiceId;
+  Timer? _connectionCheckTimer;
 
   @override
   void initState() {
     super.initState();
     _loadServices();
+    // Add observer to listen for app lifecycle changes
+    WidgetsBinding.instance.addObserver(this);
+
+    // Set up periodic connection check timer
+    _connectionCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted) {
+        _checkPrinterConnection();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // Cancel the connection check timer
+    _connectionCheckTimer?.cancel();
+    // Remove observer when disposing
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Check printer connection status when dependencies change (e.g., when navigating back)
+    _checkPrinterConnection();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    // When the app becomes visible again, check printer connection
+    if (state == AppLifecycleState.resumed) {
+      print('🔄 App resumed - checking printer connection status');
+      _checkPrinterConnection();
+    }
   }
 
   Future<void> _loadServices() async {
@@ -43,6 +82,37 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
     } catch (e) {
       _setError('Failed to load services: $e');
     }
+  }
+
+  /// Check printer connection status and update UI accordingly
+  void _checkPrinterConnection() async {
+    try {
+      // Get the printer service and check connection status
+      final printerService = context.read<PrinterService>();
+
+      // If we have a connected device, verify the connection is still active
+      if (printerService.isConnected &&
+          printerService.connectedDevice != null) {
+        print('🔍 Checking printer connection status...');
+        print('📱 Connected device: ${printerService.connectedDevice!.name}');
+        print('🔗 Connection status: ${printerService.isConnected}');
+
+        // Force rebuild to update UI based on current connection status
+        setState(() {});
+      } else {
+        print('🔍 No printer currently connected');
+        setState(() {});
+      }
+    } catch (e) {
+      print('⚠️ Error checking printer connection: $e');
+      setState(() {});
+    }
+  }
+
+  /// Refresh printer connection status manually
+  void _refreshPrinterConnection() {
+    print('🔄 Manual printer connection refresh requested');
+    _checkPrinterConnection();
   }
 
   Future<void> _scanGuardianQR() async {
@@ -777,6 +847,14 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
                     ),
                 ],
               ),
+            ),
+            IconButton(
+              onPressed: () => _refreshPrinterConnection(),
+              icon: Icon(
+                Icons.refresh,
+                color: Colors.green.shade600,
+              ),
+              tooltip: 'Refresh Connection Status',
             ),
             IconButton(
               onPressed: () => _navigateToSettings(),
