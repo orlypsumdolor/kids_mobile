@@ -294,11 +294,11 @@ If permissions are still denied, you may need to:
             }
           });
 
-          // Start the scan
-          await FlutterBluePlus.startScan(timeout: const Duration(seconds: 8));
+          // Start the scan with shorter timeout
+          await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
 
-          // Wait for scan to complete
-          await Future.delayed(const Duration(seconds: 10));
+          // Wait for scan to complete (reduced from 10 to 6 seconds)
+          await Future.delayed(const Duration(seconds: 6));
 
           // Cancel the subscription and stop scanning
           await subscription.cancel();
@@ -793,6 +793,26 @@ If permissions are still denied, you may need to:
         commands.add(0xFF); // Solid black line
       }
       return commands;
+    }
+  }
+
+  /// Get available Bluetooth devices with timeout wrapper
+  Future<List<BluetoothInfo>> getAvailableDevicesWithTimeout() async {
+    try {
+      print('⏰ Starting timeout wrapper for device scanning...');
+      final result = await getAvailableDevices().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          print('⏰ Device scanning timed out after 15 seconds');
+          return <BluetoothInfo>[];
+        },
+      );
+      print(
+          '⏰ Timeout wrapper completed successfully with ${result.length} devices');
+      return result;
+    } catch (e) {
+      print('💥 Timeout wrapper error: $e');
+      return <BluetoothInfo>[];
     }
   }
 }

@@ -76,11 +76,22 @@ class _SettingsPageState extends State<SettingsPage> {
     });
 
     try {
-      final devices = await _printerService.getAvailableDevices();
+      // Use the timeout wrapper to prevent hanging
+      final devices = await _printerService.getAvailableDevicesWithTimeout();
       setState(() {
         _availableDevices = devices;
         _isScanning = false;
       });
+
+      if (devices.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'No printers found. Make sure Bluetooth is enabled and printers are discoverable.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     } catch (e) {
       setState(() {
         _isScanning = false;
@@ -91,6 +102,13 @@ class _SettingsPageState extends State<SettingsPage> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+
+    // Ensure scanning state is reset even if there's an error
+    if (_isScanning) {
+      setState(() {
+        _isScanning = false;
+      });
     }
   }
 
@@ -457,12 +475,32 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 16),
             if (_isScanning)
-              const Center(
+              Center(
                 child: Column(
                   children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Scanning for Bluetooth printers...'),
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    const Text('Scanning for Bluetooth printers...'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This may take up to 15 seconds',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[600],
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          _isScanning = false;
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Cancel Scan'),
+                    ),
                   ],
                 ),
               )

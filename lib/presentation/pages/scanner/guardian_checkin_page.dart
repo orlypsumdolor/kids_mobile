@@ -568,58 +568,24 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
+          // Printer Status Check
+          Consumer<PrinterService>(
+            builder: (context, printerService, child) {
+              if (!printerService.isConnected) {
+                return _buildPrinterNotConnectedCard(context);
+              }
+
+              // Show scan section only if printer is connected
+              return Column(
                 children: [
-                  Icon(
-                    Icons.qr_code_scanner,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Guardian Check-In',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Scan the guardian\'s QR code or RFID tag to begin the check-in process',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    textAlign: TextAlign.center,
-                  ),
+                  _buildPrinterConnectedCard(printerService),
+                  const SizedBox(height: 24),
+                  _buildScanButtons(),
                 ],
-              ),
-            ),
+              );
+            },
           ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _isScanning ? null : _scanGuardianQR,
-                  icon: const Icon(Icons.qr_code_scanner),
-                  label: const Text('Scan QR Code'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.all(16),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _isScanning ? null : _scanGuardianRFID,
-                  icon: const Icon(Icons.credit_card),
-                  label: const Text('Scan RFID'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.all(16),
-                  ),
-                ),
-              ),
-            ],
-          ),
+
           if (_error != null) ...[
             const SizedBox(height: 16),
             Container(
@@ -648,6 +614,241 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Build scan buttons section
+  Widget _buildScanButtons() {
+    return Column(
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.qr_code_scanner,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Guardian Check-In',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Scan the guardian\'s QR code or RFID tag to begin the check-in process',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _isScanning ? null : _scanGuardianQR,
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Scan QR Code'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _isScanning ? null : _scanGuardianRFID,
+                icon: const Icon(Icons.credit_card),
+                label: const Text('Scan RFID'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Build card showing printer is not connected
+  Widget _buildPrinterNotConnectedCard(BuildContext context) {
+    return Card(
+      color: Colors.orange.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Icon(
+              Icons.print_disabled,
+              size: 48,
+              color: Colors.orange.shade700,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Printer Not Connected',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Colors.orange.shade800,
+                    fontWeight: FontWeight.bold,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You need to connect a printer before you can check in guardians and print stickers.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.orange.shade700,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () => _navigateToSettings(),
+              icon: const Icon(Icons.settings),
+              label: const Text('Connect Printer'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => _showPrinterHelp(context),
+              child: Text(
+                'Need Help?',
+                style: TextStyle(
+                  color: Colors.orange.shade700,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build card showing printer is connected
+  Widget _buildPrinterConnectedCard(PrinterService printerService) {
+    final connectedDevice = printerService.connectedDevice;
+    return Card(
+      color: Colors.green.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              Icons.print,
+              color: Colors.green.shade600,
+              size: 32,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Printer Connected',
+                    style: TextStyle(
+                      color: Colors.green.shade800,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (connectedDevice?.name != null)
+                    Text(
+                      connectedDevice!.name,
+                      style: TextStyle(
+                        color: Colors.green.shade700,
+                        fontSize: 14,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: () => _navigateToSettings(),
+              icon: Icon(
+                Icons.settings,
+                color: Colors.green.shade600,
+              ),
+              tooltip: 'Printer Settings',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Navigate to settings page to manage printer
+  void _navigateToSettings() {
+    context.push('/settings');
+  }
+
+  /// Show printer help information
+  void _showPrinterHelp(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.help_outline, color: Colors.orange.shade600),
+            const SizedBox(width: 8),
+            const Text('Printer Setup Help'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'To connect a printer:',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            const Text('1. Go to Settings > Printer Setup'),
+            const Text('2. Tap "Scan for Printers"'),
+            const Text('3. Select your printer from the list'),
+            const Text('4. Wait for connection confirmation'),
+            const SizedBox(height: 16),
+            Text(
+              'Supported printers:',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            const Text('• Bluetooth thermal printers'),
+            const Text('• ESC/POS compatible printers'),
+            const Text('• Most label printers'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _navigateToSettings();
+            },
+            child: const Text('Go to Settings'),
+          ),
         ],
       ),
     );
