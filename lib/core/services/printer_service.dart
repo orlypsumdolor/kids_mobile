@@ -708,7 +708,17 @@ If permissions are still denied, you may need to:
 
   /// Format time for display
   String _formatTime(DateTime dateTime) {
-    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    // Convert UTC time to local timezone
+    final localDateTime = dateTime.toLocal();
+
+    final hour = localDateTime.hour;
+    final minute = localDateTime.minute;
+    final period = hour >= 12 ? 'PM' : 'AM';
+
+    // Convert to 12-hour format
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+
+    return '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $period';
   }
 
   /// Generate QR code as image data
