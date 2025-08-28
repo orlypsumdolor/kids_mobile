@@ -145,55 +145,58 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
     }
   }
 
-  Future<void> _scanGuardianRFID() async {
-    setState(() {
-      _isScanning = true;
-      _error = null;
-    });
+  // RFID functionality temporarily disabled
+  // Future<void> _scanGuardianRFID() async {
+  //   setState(() {
+  //     _isScanning = true;
+  //     _error = null;
+  //   });
+  //
+  //   try {
+  //     // For now, show a dialog to enter RFID manually
+  //     // In production, this would use NFC scanning
+  //     final rfidCode = await _showRFIDInputDialog();
+  //     if (rfidCode != null) {
+  //       await _processGuardianRFID(rfidCode);
+  //     }
+  //   } catch (e) {
+  //     _setError('RFID scanning failed: $e');
+  //     }
+  //   } finally {
+  //     setState(() {
+  //       _isScanning = false;
+  //     });
+  //   }
+  // }
 
-    try {
-      // For now, show a dialog to enter RFID manually
-      // In production, this would use NFC scanning
-      final rfidCode = await _showRFIDInputDialog();
-      if (rfidCode != null) {
-        await _processGuardianRFID(rfidCode);
-      }
-    } catch (e) {
-      _setError('RFID scanning failed: $e');
-    } finally {
-      setState(() {
-        _isScanning = false;
-      });
-    }
-  }
-
-  Future<String?> _showRFIDInputDialog() async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Enter RFID Code'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'RFID Code',
-            hintText: 'Enter the RFID code from the guardian\'s tag',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Submit'),
-          ),
-        ],
-      ),
-    );
-  }
+  // RFID input dialog temporarily disabled
+  // Future<String?> _showRFIDInputDialog() async {
+  //   final controller = TextEditingController();
+  //   return showDialog<String>(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       title: const Text('Enter RFID Code'),
+  //       content: TextField(
+  //         controller: controller,
+  //         decoration: const InputDecoration(
+  //           labelText: 'RFID Code',
+  //           hintText: 'Enter the RFID code from the guardian\'s tag',
+  //         ),
+  //         autofocus: true,
+  //       ),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context),
+  //           child: const Text('Cancel'),
+  //         ),
+  //         ElevatedButton(
+  //           onPressed: () => Navigator.pop(context, controller.text.trim()),
+  //           child: const Text('Submit'),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   Future<void> _processGuardianQR(String qrCode) async {
     setState(() {
@@ -273,29 +276,30 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
     }
   }
 
-  Future<void> _processGuardianRFID(String rfidCode) async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final checkinProvider = context.read<CheckinProvider>();
-      final guardian = await checkinProvider.getGuardianByRfidTag(rfidCode);
-
-      if (guardian != null) {
-        await _fetchGuardianWithChildren(guardian.id);
-      } else {
-        _setError('Guardian not found with this RFID code');
-      }
-    } catch (e) {
-      _setError('Failed to process guardian RFID code: $e');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
+  // RFID processing temporarily disabled
+  // Future<void> _processGuardianRFID(String rfidCode) async {
+  //   setState(() {
+  //     _isLoading = true;
+  //     _error = null;
+  //   });
+  //
+  //   try {
+  //     final checkinProvider = context.read<CheckinProvider>();
+  //     final guardian = await checkinProvider.getGuardianByRfidTag(rfidCode);
+  //
+  //     if (guardian != null) {
+  //       await _fetchGuardianWithChildren(guardian.id);
+  //       } else {
+  //         _setError('Guardian not found with this RFID code');
+  //       }
+  //     } catch (e) {
+  //       _setError('Failed to process guardian RFID code: $e');
+  //     } finally {
+  //       setState(() {
+  //         _isLoading = false;
+  //       });
+  //     }
+  //   }
 
   Future<void> _fetchGuardianWithChildren(String guardianId) async {
     try {
@@ -711,7 +715,7 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Scan the guardian\'s QR code or RFID tag to begin the check-in process',
+                  'Scan the guardian\'s QR code to begin the check-in process\nRFID scanning is temporarily disabled',
                   style: Theme.of(context).textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -735,11 +739,17 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
             const SizedBox(width: 16),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: _isScanning ? null : _scanGuardianRFID,
+                onPressed: null, // Disabled - can't be clicked
                 icon: const Icon(Icons.credit_card),
                 label: const Text('Scan RFID'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.all(16),
+                  backgroundColor:
+                      Colors.grey.shade100, // Very light gray background
+                  foregroundColor:
+                      Colors.grey.shade500, // Medium gray text/icon
+                  disabledBackgroundColor: Colors.grey.shade100,
+                  disabledForegroundColor: Colors.grey.shade500,
                 ),
               ),
             ),
@@ -1209,22 +1219,23 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
     }
   }
 
-  String _detectRFIDCodeType(String code) {
-    if (code.startsWith('RFID')) {
-      return 'RFID Tag Format';
-    } else if (code.length == 8 &&
-        RegExp(r'^[0-9A-F]+$', caseSensitive: false).hasMatch(code)) {
-      return '8-digit Hex RFID';
-    } else if (code.length == 10 && RegExp(r'^[0-9]+$').hasMatch(code)) {
-      return '10-digit Numeric RFID';
-    } else if (code.length == 12 && RegExp(r'^[0-9]+$').hasMatch(code)) {
-      return '12-digit Numeric RFID';
-    } else if (RegExp(r'^[0-9A-F]+$', caseSensitive: false).hasMatch(code)) {
-      return 'Hex RFID';
-    } else if (RegExp(r'^[0-9]+$').hasMatch(code)) {
-      return 'Numeric RFID';
-    } else {
-      return 'Custom Format';
-    }
-  }
+  // RFID detection helper temporarily disabled
+  // String _detectRFIDCodeType(String code) {
+  //   if (code.startsWith('RFID')) {
+  //     return 'RFID Tag Format';
+  //   } else if (code.length == 8 &&
+  //       RegExp(r'^[0-9A-F]+$', caseSensitive: false).hasMatch(code)) {
+  //     return '8-digit Hex RFID';
+  //   } else if (code.length == 10 && RegExp(r'^[0-9]+$').hasMatch(code)) {
+  //     return '10-digit Numeric RFID';
+  //   } else if (code.length == 12 && RegExp(r'^[0-9]+$').hasMatch(code)) {
+  //     return '12-digit Numeric RFID';
+  //   } else if (RegExp(r'^[0-9A-F]+$', caseSensitive: false).hasMatch(code)) {
+  //     return 'Hex RFID';
+  //   } else if (RegExp(r'^[0-9]+$').hasMatch(code)) {
+  //     return 'Numeric RFID';
+  //   } else {
+  //     return 'Custom Format';
+  //   }
+  // }
 }
