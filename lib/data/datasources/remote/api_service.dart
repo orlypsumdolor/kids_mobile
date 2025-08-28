@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/services/api_response_handler.dart';
+import '../../../data/models/api_error_model.dart';
 import '../../../domain/entities/guardian.dart';
 
 class ApiService {
@@ -264,28 +266,26 @@ class ApiService {
 
   // Helper method to extract data from API response
   Map<String, dynamic>? extractData(Response response) {
-    if (response.data is Map<String, dynamic>) {
-      final data = response.data as Map<String, dynamic>;
-      return data['data'] as Map<String, dynamic>?;
-    }
-    return null;
+    return ApiResponseHandler.handleSuccessResponse(response);
   }
 
   // Helper method to extract success status from API response
   bool isSuccess(Response response) {
-    if (response.data is Map<String, dynamic>) {
-      final data = response.data as Map<String, dynamic>;
-      return data['success'] == true;
-    }
-    return false;
+    return ApiResponseHandler.isSuccessResponse(response);
   }
 
   // Helper method to extract message from API response
   String? getMessage(Response response) {
-    if (response.data is Map<String, dynamic>) {
-      final data = response.data as Map<String, dynamic>;
-      return data['message'] as String?;
-    }
-    return null;
+    return ApiResponseHandler.getSuccessMessage(response);
+  }
+
+  // Helper method to extract pagination data from API response
+  Map<String, dynamic>? getPaginationData(Response response) {
+    return ApiResponseHandler.getPaginationData(response);
+  }
+
+  // Helper method to handle API errors
+  ApiErrorResponse handleError(dynamic error) {
+    return ApiResponseHandler.handleErrorResponse(error);
   }
 }
