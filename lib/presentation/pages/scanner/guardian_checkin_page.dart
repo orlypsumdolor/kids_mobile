@@ -437,7 +437,8 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
         }
       });
     } catch (e) {
-      _setError('Check-in failed: $e');
+      final msg = e.toString().replaceAll(RegExp(r'^Exception:\s*'), '');
+      _setError(msg);
     } finally {
       setState(() {
         _isLoading = false;

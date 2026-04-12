@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
 import '../../domain/entities/child.dart';
 import '../../domain/entities/checkin_session.dart';
 import '../../domain/entities/attendance_record.dart';
@@ -237,7 +238,7 @@ class CheckinProvider extends ChangeNotifier {
       return [];
     } catch (e) {
       print('💥 Error checking in children: $e');
-      throw Exception('Failed to check in children: $e');
+      throw Exception(_extractApiMessage(e) ?? 'Failed to check in children');
     }
   }
 
@@ -303,7 +304,7 @@ class CheckinProvider extends ChangeNotifier {
       return [];
     } catch (e) {
       print('💥 Error checking out children: $e');
-      throw Exception('Failed to check out children: $e');
+      throw Exception(_extractApiMessage(e) ?? 'Failed to check out children');
     }
   }
 
@@ -535,6 +536,24 @@ class CheckinProvider extends ChangeNotifier {
   void _clearSuccess() {
     _successMessage = null;
     notifyListeners();
+  }
+
+  /// Extract a human-readable message from a DioException's response body.
+  /// Returns null if the error isn't a DioException or has no parseable body.
+  String? _extractApiMessage(dynamic error) {
+    if (error is! DioException) return null;
+    final data = error.response?.data;
+    if (data is Map<String, dynamic>) {
+      final errors = data['errors'];
+      if (errors is List && errors.isNotEmpty) {
+        return errors.join('\n');
+      }
+      final message = data['message'];
+      if (message is String && message.isNotEmpty) {
+        return message;
+      }
+    }
+    return null;
   }
 
   @override

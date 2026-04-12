@@ -791,9 +791,9 @@ If permissions are still denied, you may need to:
   ///   rotated height = 576+ dots → feeds out as the long dimension
   Future<List<int>> _renderStickerAsRaster(List<_StickerLine> lines) async {
     // Landscape canvas: long side across, short side down
-    // Sticker is ~50mm x ~95mm → 400 x 760 dots at 8 dots/mm
-    const int canvasW = 760; // sticker long side (~95mm)
-    const int canvasH = 400; // sticker short side (~50mm)
+    // Sticker is 50mm x 100mm → 400 x 800 dots at 8 dots/mm
+    const int canvasW = 800; // sticker long side (100mm)
+    const int canvasH = 400; // sticker short side (50mm)
     const double padding = 16;
 
     // Paint text onto landscape canvas
