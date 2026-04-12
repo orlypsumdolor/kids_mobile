@@ -40,6 +40,7 @@ dependencies:
   
   # Printing
   print_bluetooth_thermal: ^1.1.6
+  flutter_usb_thermal_plugin: ^0.0.1+1  # USB printer support
   esc_pos_utils: ^1.1.0
   image: ^3.3.0
   flutter_blue_plus: ^1.31.15  # Added for Bluetooth device scanning

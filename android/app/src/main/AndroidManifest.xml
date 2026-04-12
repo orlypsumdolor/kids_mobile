@@ -28,6 +28,16 @@
         android:name="android.hardware.bluetooth"
         android:required="false" />
 
+    <!-- USB host (OTG) - required to detect USB printers and barcode scanners -->
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
+
+    <!-- USB accessory support for kiosk peripherals -->
+    <uses-feature
+        android:name="android.hardware.usb.accessory"
+        android:required="false" />
+
     <application
         android:label="Kids Church Check-in"
         android:name="${applicationName}"
@@ -54,6 +64,13 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- USB device attached - so app can see OTG printers (e.g. Goojprt MTP-3) -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
         </activity>
         
         <!-- Don't delete the meta-data below.

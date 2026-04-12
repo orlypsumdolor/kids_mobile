@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_usb_thermal_plugin/model/usb_device_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../../core/models/connected_printer_info.dart';
 import '../../../core/services/printer_service.dart';
 import '../../../domain/entities/child.dart';
 import '../../../domain/entities/checkin_session.dart';
@@ -17,7 +19,9 @@ class _SettingsPageState extends State<SettingsPage> {
   late PrinterService _printerService;
   bool _isScanning = false;
   List<dynamic> _availableDevices = [];
-  dynamic _connectedDevice;
+  List<UsbDevice> _availableUsbDevices = [];
+  bool _showUsbDevices = false; // false = Bluetooth list, true = USB list
+  ConnectedPrinterInfo? _connectedDevice;
 
   @override
   void initState() {
@@ -70,32 +74,54 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  void _scanForPrinters() async {
+  void _scanForPrinters([void Function()? onComplete]) async {
     setState(() {
       _isScanning = true;
     });
 
     try {
-      // Use the timeout wrapper to prevent hanging
       final devices = await _printerService.getAvailableDevicesWithTimeout();
       setState(() {
         _availableDevices = devices;
         _isScanning = false;
       });
-
-      if (devices.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'No printers found. Make sure Bluetooth is enabled and printers are discoverable.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
+      onComplete?.call();
+      if (devices.isEmpty && mounted) {
+        final status = await _printerService.checkPermissionStatus();
+        final hasBluetoothPermission = status['bluetooth'] == true &&
+            status['bluetoothScan'] == true &&
+            status['bluetoothConnect'] == true;
+        if (!hasBluetoothPermission) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Bluetooth permission required. Enable "Nearby devices" and "Location" in app Settings to scan for printers.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Open Settings',
+                textColor: Colors.white,
+                onPressed: () => _printerService.openAppSettings(),
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No printers found. Make sure Bluetooth is on and your printer is discoverable.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
       }
     } catch (e) {
       setState(() {
         _isScanning = false;
       });
+      onComplete?.call();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to scan for printers: $e'),
@@ -103,21 +129,54 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       );
     }
+  }
 
-    // Ensure scanning state is reset even if there's an error
-    if (_isScanning) {
-      setState(() {
-        _isScanning = false;
-      });
+  void _scanForUsbPrinters([void Function()? onComplete]) async {
+    setState(() {
+      _isScanning = true;
+      _showUsbDevices = true;
+      _availableUsbDevices = [];
+    });
+
+    try {
+      final devices =
+          await _printerService.getAvailableUsbDevicesWithTimeout();
+      if (mounted) {
+        setState(() {
+          _availableUsbDevices = devices;
+          _isScanning = false;
+        });
+        onComplete?.call();
+        if (devices.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'No USB printers found. Connect a USB printer and try again.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isScanning = false);
+        onComplete?.call();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to scan for USB printers: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  void _connectToPrinter(dynamic device) async {
+  void _connectToBluetoothPrinter(dynamic device) async {
     try {
-      final success = await _printerService.connect(device);
+      final success = await _printerService.connectBluetooth(device);
       if (success) {
         setState(() {
-          _connectedDevice = device;
+          _connectedDevice = _printerService.connectedDevice;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -139,6 +198,56 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error connecting to printer: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _connectToUsbPrinter(UsbDevice device) async {
+    try {
+      final vendorId = device.vendorId;
+      final productId = device.productId;
+      if (vendorId.isEmpty || productId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid USB printer'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      final name = device.productName.isNotEmpty
+          ? device.productName
+          : '${device.manufacturer} USB Printer';
+      final success = await _printerService.connectUsb(
+        name,
+        vendorId,
+        productId,
+      );
+      if (success) {
+        setState(() {
+          _connectedDevice = _printerService.connectedDevice;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Connected to $name (USB) successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to connect to $name'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error connecting to USB printer: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -297,7 +406,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(_connectedDevice != null
-                              ? '${_connectedDevice!.name} (${_connectedDevice!.macAdress})'
+                              ? '${_connectedDevice!.name} (${_connectedDevice!.addressOrId})'
                               : 'No printer connected'),
                           if (_connectedDevice != null)
                             Container(
@@ -325,8 +434,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           if (_connectedDevice != null)
                             IconButton(
-                              icon: const Icon(Icons.bluetooth_disabled,
-                                  color: Colors.red),
+                              icon: Icon(
+                                _connectedDevice!.isUsb
+                                    ? Icons.usb_off
+                                    : Icons.bluetooth_disabled,
+                                color: Colors.red,
+                              ),
                               onPressed: _disconnectPrinter,
                               tooltip: 'Disconnect',
                             ),
@@ -448,118 +561,262 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _showPrinterSelection() {
-    // First scan for available printers
-    _scanForPrinters();
+    _showUsbDevices = false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        height: MediaQuery.of(context).size.height * 0.7,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          void refreshModal() {
+            setModalState(() {
+              _connectedDevice = _printerService.connectedDevice;
+            });
+          }
+
+          return Container(
+            padding: const EdgeInsets.all(16),
+            height: MediaQuery.of(context).size.height * 0.7,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Select Printer',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-                IconButton(
-                  icon: Icon(_isScanning ? Icons.refresh : Icons.refresh),
-                  onPressed: _isScanning ? null : _scanForPrinters,
+                const SizedBox(height: 12),
+                // Bluetooth / USB choice
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: Icon(
+                          Icons.bluetooth,
+                          color: _showUsbDevices ? null : Theme.of(context).colorScheme.primary,
+                        ),
+                        label: const Text('Bluetooth'),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: _showUsbDevices
+                              ? null
+                              : Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                        ),
+                        onPressed: () {
+                          setModalState(() {
+                            _showUsbDevices = false;
+                            _isScanning = true;
+                            _availableDevices = [];
+                          });
+                          _scanForPrinters(() => setModalState(() {}));
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: Icon(
+                          Icons.usb,
+                          color: !_showUsbDevices ? null : Theme.of(context).colorScheme.primary,
+                        ),
+                        label: const Text('USB'),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: !_showUsbDevices
+                              ? null
+                              : Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                        ),
+                        onPressed: () {
+                          setModalState(() {
+                            _showUsbDevices = true;
+                            _isScanning = true;
+                            _availableUsbDevices = [];
+                          });
+                          _scanForUsbPrinters(() => setModalState(() {}));
+                        },
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _showUsbDevices ? 'USB printers' : 'Bluetooth printers',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    IconButton(
+                      icon: Icon(_isScanning ? Icons.refresh : Icons.refresh),
+                      onPressed: _isScanning
+                          ? null
+                          : () {
+                              setModalState(() {
+                                _isScanning = true;
+                              });
+                              if (_showUsbDevices) {
+                                _scanForUsbPrinters(() => setModalState(() {}));
+                              } else {
+                                _scanForPrinters(() => setModalState(() {}));
+                              }
+                            },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_isScanning)
+                  Center(
+                    child: Column(
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
+                        Text(
+                          _showUsbDevices
+                              ? 'Scanning for USB printers...'
+                              : 'Scanning for Bluetooth printers...',
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _showUsbDevices
+                              ? 'Make sure the printer is connected via USB'
+                              : 'This may take up to 15 seconds',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.grey[600],
+                              ),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (_showUsbDevices)
+                  _availableUsbDevices.isEmpty
+                      ? const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.usb_off, size: 48, color: Colors.grey),
+                              SizedBox(height: 16),
+                              Text('No USB printers found'),
+                              Text(
+                                  'Connect a USB printer to your device and try again'),
+                            ],
+                          ),
+                        )
+                      : Expanded(
+                          child: ListView.builder(
+                            itemCount: _availableUsbDevices.length,
+                            itemBuilder: (context, index) {
+                              final device = _availableUsbDevices[index];
+                              final isConnected = _connectedDevice != null &&
+                                  _connectedDevice!.isUsb &&
+                                  _connectedDevice!.addressOrId.contains(
+                                      '${device.vendorId}:${device.productId}');
+                              final name = device.productName.isNotEmpty
+                                  ? device.productName
+                                  : '${device.manufacturer} USB';
+
+                              return ListTile(
+                                leading: Icon(
+                                  Icons.usb,
+                                  color: isConnected ? Colors.green : Colors.blue,
+                                ),
+                                title: Text(name),
+                                subtitle: Text(
+                                    '${device.vendorId}:${device.productId}'),
+                                trailing: isConnected
+                                    ? const Icon(Icons.check, color: Colors.green)
+                                    : const Icon(Icons.arrow_forward_ios,
+                                        size: 16),
+                                onTap: isConnected
+                                    ? null
+                                    : () => _connectToUsbPrinter(device),
+                              );
+                            },
+                          ),
+                        )
+                else if (_availableDevices.isEmpty)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.bluetooth_disabled,
+                              size: 48, color: Colors.grey[600]),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No Bluetooth printers found',
+                            style: Theme.of(context).textTheme.titleSmall,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Enable "Nearby devices" and "Location" in Settings to scan, or ensure your printer is on and discoverable.',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.grey[600],
+                                ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 20),
+                          FilledButton.icon(
+                            icon: const Icon(Icons.settings, size: 20),
+                            label: const Text('Open app Settings'),
+                            onPressed: () =>
+                                _printerService.openAppSettings(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _availableDevices.length,
+                      itemBuilder: (context, index) {
+                        final device = _availableDevices[index];
+                        final isConnected = _connectedDevice != null &&
+                            !_connectedDevice!.isUsb &&
+                            _connectedDevice!.addressOrId == device.macAdress;
+
+                        return ListTile(
+                          leading: Icon(
+                            isConnected
+                                ? Icons.bluetooth_connected
+                                : Icons.bluetooth,
+                            color: isConnected ? Colors.green : Colors.blue,
+                          ),
+                          title: Text(device.name),
+                          subtitle: Text(device.macAdress),
+                          trailing: isConnected
+                              ? const Icon(Icons.check, color: Colors.green)
+                              : const Icon(Icons.arrow_forward_ios, size: 16),
+                          onTap: isConnected
+                              ? null
+                              : () => _connectToBluetoothPrinter(device),
+                        );
+                      },
+                    ),
+                  ),
+                if (_connectedDevice != null) ...[
+                  const Divider(),
+                  ListTile(
+                    leading: Icon(
+                      _connectedDevice!.isUsb ? Icons.usb_off : Icons.bluetooth_disabled,
+                      color: Colors.red,
+                    ),
+                    title: const Text('Disconnect Current Printer'),
+                    subtitle:
+                        Text('Currently connected to ${_connectedDevice!.name}'),
+                    onTap: () {
+                      _disconnectPrinter();
+                      setState(() {
+                        _connectedDevice = null;
+                      });
+                      refreshModal();
+                      Navigator.pop(context);
+                    },
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 16),
-            if (_isScanning)
-              Center(
-                child: Column(
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 16),
-                    const Text('Scanning for Bluetooth printers...'),
-                    const SizedBox(height: 8),
-                    Text(
-                      'This may take up to 15 seconds',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey[600],
-                          ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _isScanning = false;
-                        });
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('Cancel Scan'),
-                    ),
-                  ],
-                ),
-              )
-            else if (_availableDevices.isEmpty)
-              const Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.bluetooth_disabled,
-                        size: 48, color: Colors.grey),
-                    SizedBox(height: 16),
-                    Text('No Bluetooth printers found'),
-                    Text(
-                        'Make sure your printer is turned on and discoverable'),
-                  ],
-                ),
-              )
-            else
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _availableDevices.length,
-                  itemBuilder: (context, index) {
-                    final device = _availableDevices[index];
-                    final isConnected =
-                        _connectedDevice?.macAdress == device.macAdress;
-
-                    return ListTile(
-                      leading: Icon(
-                        isConnected
-                            ? Icons.bluetooth_connected
-                            : Icons.bluetooth,
-                        color: isConnected ? Colors.green : Colors.blue,
-                      ),
-                      title: Text(device.name),
-                      subtitle: Text(device.macAdress),
-                      trailing: isConnected
-                          ? const Icon(Icons.check, color: Colors.green)
-                          : const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap:
-                          isConnected ? null : () => _connectToPrinter(device),
-                    );
-                  },
-                ),
-              ),
-            if (_connectedDevice != null) ...[
-              const Divider(),
-              ListTile(
-                leading:
-                    const Icon(Icons.bluetooth_disabled, color: Colors.red),
-                title: const Text('Disconnect Current Printer'),
-                subtitle:
-                    Text('Currently connected to ${_connectedDevice!.name}'),
-                onTap: () {
-                  _disconnectPrinter();
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          ],
-        ),
+          );
+        },
       ),
     );
   }

@@ -27,6 +27,7 @@ import '../../presentation/providers/services_provider.dart';
 import '../../core/services/camera_service.dart';
 // import '../../core/services/nfc_service.dart'; // Temporarily disabled
 import '../../core/services/printer_service.dart';
+import '../../core/services/hardware_scanner_service.dart';
 import '../../core/services/permission_service.dart';
 
 final getIt = GetIt.instance;
@@ -50,6 +51,8 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<CameraService>(() => CameraService());
   // getIt.registerLazySingleton<NfcService>(() => NfcService()); // Temporarily disabled
   getIt.registerLazySingleton<PrinterService>(() => PrinterService());
+  getIt.registerLazySingleton<HardwareScannerService>(
+      () => HardwareScannerService());
   getIt.registerLazySingleton<PermissionService>(() => PermissionService());
 
   // Repositories

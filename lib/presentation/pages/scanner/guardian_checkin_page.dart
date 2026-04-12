@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:async';
@@ -11,6 +12,7 @@ import '../../../domain/entities/attendance_record.dart';
 import '../../../domain/entities/service_session.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/services/printer_service.dart';
+import '../../../core/services/hardware_scanner_service.dart';
 import '../../../data/models/guardian_model.dart';
 import '../../../data/models/child_model.dart';
 
@@ -34,14 +36,28 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
   String? _selectedServiceId;
   Timer? _connectionCheckTimer;
 
+  // Hardware barcode scanner (M7710) support
+  late final FocusNode _scannerFocusNode;
+  StreamSubscription<String>? _scannerSubscription;
+  bool _hwScannerActive = true;
+
   @override
   void initState() {
     super.initState();
     _loadServices();
-    // Add observer to listen for app lifecycle changes
     WidgetsBinding.instance.addObserver(this);
 
-    // Set up periodic connection check timer
+    _scannerFocusNode = FocusNode(debugLabel: 'hardwareScanner');
+
+    // Listen for barcodes from the M7710 hardware scanner
+    final scannerService = context.read<HardwareScannerService>();
+    _scannerSubscription = scannerService.onBarcodeScanned.listen((barcode) {
+      if (mounted && !_isLoading && _scannedGuardian == null) {
+        print('📡 Hardware scanner input received: "$barcode"');
+        _processGuardianQR(barcode);
+      }
+    });
+
     _connectionCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (mounted) {
         _checkPrinterConnection();
@@ -51,9 +67,9 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
 
   @override
   void dispose() {
-    // Cancel the connection check timer
     _connectionCheckTimer?.cancel();
-    // Remove observer when disposing
+    _scannerSubscription?.cancel();
+    _scannerFocusNode.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -142,6 +158,8 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
       setState(() {
         _isScanning = false;
       });
+      // Re-grab focus for hardware scanner after camera scan finishes
+      _scannerFocusNode.requestFocus();
     }
   }
 
@@ -442,39 +460,20 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
       if (!printerService.isConnected) {
         print('⚠️ Printer not connected. Checking for saved connection...');
 
-        // Check if there's a saved printer connection first
-        final savedDevice = printerService.connectedDevice;
-        if (savedDevice != null) {
-          print(
-              '🔄 Found saved printer: ${savedDevice.name}. Attempting to reconnect...');
-          final connected = await printerService.connect(savedDevice);
-          if (connected) {
-            print(
-                '✅ Successfully reconnected to saved printer: ${savedDevice.name}');
-          } else {
-            print(
-                '❌ Failed to reconnect to saved printer: ${savedDevice.name}');
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      '⚠️ Failed to reconnect to saved printer: ${savedDevice.name}. Please check printer connection in Settings.'),
-                  backgroundColor: Colors.orange,
-                  duration: const Duration(seconds: 5),
-                ),
-              );
-            }
-            return;
-          }
+        // Try to reconnect using saved printer (Bluetooth or USB)
+        print('🔄 Attempting to reconnect to saved printer...');
+        final connected = await printerService.reconnect();
+        if (connected) {
+          print('✅ Successfully reconnected to saved printer');
         } else {
-          print('❌ No saved printer connection found');
+          print('❌ Failed to reconnect to saved printer');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+              SnackBar(
                 content: Text(
-                    '⚠️ No printer connected. Please connect a printer in Settings first.'),
+                    '⚠️ Failed to reconnect to printer. Please check printer connection in Settings.'),
                 backgroundColor: Colors.orange,
-                duration: Duration(seconds: 5),
+                duration: const Duration(seconds: 5),
               ),
             );
           }
@@ -601,6 +600,14 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
       _error = null;
       _successMessage = null;
     });
+    // Re-grab focus so the hardware scanner keeps receiving input
+    _scannerFocusNode.requestFocus();
+  }
+
+  /// Route key events from the focus node to the hardware scanner service.
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    final scannerService = context.read<HardwareScannerService>();
+    return scannerService.handleKeyEvent(event);
   }
 
   @override
@@ -608,19 +615,27 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
     final servicesProvider = context.watch<ServicesProvider>();
     final services = servicesProvider.services;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Guardian Check-In'),
-        actions: [
-          if (_scannedGuardian != null)
-            IconButton(
-              onPressed: _resetForm,
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Start Over',
-            ),
-        ],
+    return Focus(
+      focusNode: _scannerFocusNode,
+      autofocus: true,
+      onKeyEvent: _onKeyEvent,
+      child: GestureDetector(
+        onTap: () => _scannerFocusNode.requestFocus(),
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Guardian Check-In'),
+            actions: [
+              if (_scannedGuardian != null)
+                IconButton(
+                  onPressed: _resetForm,
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Start Over',
+                ),
+            ],
+          ),
+          body: _buildBody(services),
+        ),
       ),
-      body: _buildBody(services),
     );
   }
 
@@ -697,15 +712,19 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
   Widget _buildScanButtons() {
     return Column(
       children: [
+        // Hardware scanner status card
         Card(
+          color: _hwScannerActive ? Colors.blue.shade50 : Colors.grey.shade100,
           child: Padding(
             padding: const EdgeInsets.all(20.0),
             child: Column(
               children: [
                 Icon(
-                  Icons.qr_code_scanner,
+                  Icons.scanner,
                   size: 64,
-                  color: Theme.of(context).colorScheme.primary,
+                  color: _hwScannerActive
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey,
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -715,41 +734,64 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Scan the guardian\'s QR code to begin the check-in process\nRFID scanning is temporarily disabled',
+                  _hwScannerActive
+                      ? 'Place a QR code or barcode under the scanner\nThe kiosk scanner is ready and listening'
+                      : 'Hardware scanner is inactive',
                   style: Theme.of(context).textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
+                if (_hwScannerActive) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Scanner Active',
+                        style: TextStyle(
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+        // Fallback: camera-based QR scan button
         Row(
           children: [
             Expanded(
-              child: ElevatedButton.icon(
+              child: OutlinedButton.icon(
                 onPressed: _isScanning ? null : _scanGuardianQR,
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('Scan QR Code'),
-                style: ElevatedButton.styleFrom(
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Camera Scan (Fallback)'),
+                style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.all(16),
                 ),
               ),
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed: null, // Disabled - can't be clicked
+              child: OutlinedButton.icon(
+                onPressed: null,
                 icon: const Icon(Icons.credit_card),
-                label: const Text('Scan RFID'),
-                style: ElevatedButton.styleFrom(
+                label: const Text('RFID'),
+                style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.all(16),
-                  backgroundColor:
-                      Colors.grey.shade100, // Very light gray background
-                  foregroundColor:
-                      Colors.grey.shade500, // Medium gray text/icon
-                  disabledBackgroundColor: Colors.grey.shade100,
-                  disabledForegroundColor: Colors.grey.shade500,
+                  foregroundColor: Colors.grey.shade500,
                 ),
               ),
             ),
@@ -894,7 +936,7 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
           children: [
             Icon(Icons.help_outline, color: Colors.orange.shade600),
             const SizedBox(width: 8),
-            const Text('Printer Setup Help'),
+            const Text('Kiosk Setup Help'),
           ],
         ),
         content: Column(
@@ -902,27 +944,27 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'To connect a printer:',
+              'Printer (REGO M90 / 80mm):',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 8),
             const Text('1. Go to Settings > Printer Setup'),
-            const Text('2. Tap "Scan for Printers"'),
-            const Text('3. Select your printer from the list'),
-            const Text('4. Wait for connection confirmation'),
+            const Text('2. Tap USB and select the thermal printer'),
+            const Text('3. Wait for connection confirmation'),
             const SizedBox(height: 16),
             Text(
-              'Supported printers:',
+              'Scanner (M7710):',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 8),
-            const Text('• Bluetooth thermal printers'),
-            const Text('• ESC/POS compatible printers'),
-            const Text('• Most label printers'),
+            const Text('• The embedded barcode scanner is always active'),
+            const Text('• Supports QR codes, Code128, EAN-13, and more'),
+            const Text('• Place a barcode/QR under the scanner window'),
+            const Text('• Camera scan is available as a fallback'),
           ],
         ),
         actions: [

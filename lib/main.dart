@@ -6,6 +6,7 @@ import 'core/di/injection.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/printer_service.dart';
+import 'core/services/hardware_scanner_service.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/checkin_provider.dart';
 import 'presentation/providers/checkout_provider.dart';
@@ -37,6 +38,7 @@ class KidsChurchApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => getIt<CheckoutProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<ServicesProvider>()),
         Provider(create: (_) => getIt<PrinterService>()),
+        Provider(create: (_) => getIt<HardwareScannerService>()),
       ],
       child: MaterialApp.router(
         title: 'Kids Church Check-in',

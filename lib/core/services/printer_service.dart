@@ -1,27 +1,64 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:permission_handler/permission_handler.dart' as perm;
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter_usb_thermal_plugin/flutter_usb_thermal_plugin.dart';
+import 'package:flutter_usb_thermal_plugin/model/usb_device_model.dart';
 import '../../domain/entities/child.dart';
 import '../../domain/entities/checkin_session.dart';
 import 'package:esc_pos_utils/esc_pos_utils.dart';
 import 'package:image/image.dart' as img;
+import '../models/connected_printer_info.dart';
+
+enum PrinterConnectionType { bluetooth, usb }
 
 class PrinterService {
   bool _isConnected = false;
+  PrinterConnectionType? _connectionType;
   BluetoothInfo? _connectedDevice;
   BluetoothDevice? _connectedBleDevice;
+  String? _connectedUsbName;
+  String? _connectedUsbVendorId;
+  String? _connectedUsbProductId;
+  FlutterUsbThermalPlugin? _usbPlugin;
   static const String _printerNameKey = 'connected_printer_name';
   static const String _printerAddressKey = 'connected_printer_address';
+  static const String _printerTypeKey = 'connected_printer_type';
+  static const String _printerUsbVendorIdKey = 'connected_printer_usb_vendor_id';
+  static const String _printerUsbProductIdKey = 'connected_printer_usb_product_id';
 
   bool get isConnected => _isConnected;
-  BluetoothInfo? get connectedDevice => _connectedDevice;
+  PrinterConnectionType? get connectionType => _connectionType;
+
+  /// Unified connected printer info for display (works for both Bluetooth and USB).
+  ConnectedPrinterInfo? get connectedDevice {
+    if (!_isConnected) return null;
+    if (_connectionType == PrinterConnectionType.usb &&
+        _connectedUsbName != null &&
+        _connectedUsbVendorId != null &&
+        _connectedUsbProductId != null) {
+      return ConnectedPrinterInfo(
+        name: _connectedUsbName!,
+        addressOrId: 'USB (${_connectedUsbVendorId!}:${_connectedUsbProductId!})',
+        isUsb: true,
+      );
+    }
+    if (_connectionType == PrinterConnectionType.bluetooth && _connectedDevice != null) {
+      return ConnectedPrinterInfo(
+        name: _connectedDevice!.name ?? 'Unknown',
+        addressOrId: _connectedDevice!.macAdress ?? '',
+        isUsb: false,
+      );
+    }
+    return null;
+  }
 
   /// Initialize the printer service and restore saved connection
   Future<void> initialize() async {
@@ -32,12 +69,15 @@ class PrinterService {
     }
   }
 
-  /// Save printer connection information to persistent storage
+  /// Save Bluetooth printer connection to persistent storage
   Future<void> _savePrinterConnection(BluetoothInfo device) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_printerTypeKey, 'bluetooth');
       await prefs.setString(_printerNameKey, device.name ?? 'Unknown');
       await prefs.setString(_printerAddressKey, device.macAdress ?? '');
+      await prefs.remove(_printerUsbVendorIdKey);
+      await prefs.remove(_printerUsbProductIdKey);
       print(
           '💾 Saved printer connection: ${device.name} (${device.macAdress})');
     } catch (e) {
@@ -45,27 +85,62 @@ class PrinterService {
     }
   }
 
+  /// Save USB printer connection to persistent storage
+  Future<void> _saveUsbPrinterConnection(
+      String name, String vendorId, String productId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_printerTypeKey, 'usb');
+      await prefs.setString(_printerNameKey, name);
+      await prefs.setString(_printerUsbVendorIdKey, vendorId);
+      await prefs.setString(_printerUsbProductIdKey, productId);
+      await prefs.remove(_printerAddressKey);
+      print('💾 Saved USB printer connection: $name ($vendorId:$productId)');
+    } catch (e) {
+      print('❌ Failed to save USB printer connection: $e');
+    }
+  }
+
   /// Restore printer connection from persistent storage
   Future<void> _restoreSavedConnection() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final savedType = prefs.getString(_printerTypeKey);
       final savedName = prefs.getString(_printerNameKey);
-      final savedAddress = prefs.getString(_printerAddressKey);
 
-      if (savedName != null &&
-          savedAddress != null &&
-          savedAddress.isNotEmpty) {
+      if (savedName == null || savedName.isEmpty) return;
+
+      if (savedType == 'usb') {
+        final vendorId = prefs.getString(_printerUsbVendorIdKey);
+        final productId = prefs.getString(_printerUsbProductIdKey);
+        if (vendorId != null &&
+            productId != null &&
+            vendorId.isNotEmpty &&
+            productId.isNotEmpty) {
+          print(
+              '🔄 Restoring saved USB printer connection: $savedName ($vendorId:$productId)');
+          final success = await connectUsb(savedName, vendorId, productId);
+          if (success) {
+            print('✅ Successfully restored connection to saved USB printer');
+          } else {
+            print(
+                '⚠️ Could not restore connection to saved USB printer, clearing saved data');
+            await _clearSavedConnection();
+          }
+        }
+        return;
+      }
+
+      // Bluetooth
+      final savedAddress = prefs.getString(_printerAddressKey);
+      if (savedAddress != null && savedAddress.isNotEmpty) {
         print(
             '🔄 Restoring saved printer connection: $savedName ($savedAddress)');
-
-        // Create a BluetoothInfo object from saved data
         final savedDevice = BluetoothInfo(
           name: savedName,
           macAdress: savedAddress,
         );
-
-        // Try to reconnect to the saved printer
-        final success = await connect(savedDevice);
+        final success = await connectBluetooth(savedDevice);
         if (success) {
           print('✅ Successfully restored connection to saved printer');
         } else {
@@ -84,8 +159,11 @@ class PrinterService {
   Future<void> _clearSavedConnection() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_printerTypeKey);
       await prefs.remove(_printerNameKey);
       await prefs.remove(_printerAddressKey);
+      await prefs.remove(_printerUsbVendorIdKey);
+      await prefs.remove(_printerUsbProductIdKey);
       print('🗑️ Cleared saved printer connection');
     } catch (e) {
       print('❌ Failed to clear saved printer connection: $e');
@@ -96,15 +174,20 @@ class PrinterService {
   Future<void> clearSavedConnection() async {
     await _clearSavedConnection();
     _isConnected = false;
+    _connectionType = null;
     _connectedDevice = null;
     _connectedBleDevice = null;
+    _connectedUsbName = null;
+    _connectedUsbVendorId = null;
+    _connectedUsbProductId = null;
+    _usbPlugin = null;
     print('🗑️ Public clear saved connection completed');
   }
 
-  /// Open app settings to allow user to manually enable permissions
+  /// Open app settings so the user can enable Bluetooth (Nearby devices) and Location
   Future<void> openAppSettings() async {
     try {
-      await openAppSettings();
+      await perm.openAppSettings();
       print('🔧 Opened app settings');
     } catch (e) {
       print('❌ Could not open app settings: $e');
@@ -113,16 +196,16 @@ class PrinterService {
 
   /// Check if permissions are granted without requesting them
   Future<Map<String, bool>> checkPermissionStatus() async {
-    final bluetoothStatus = await Permission.bluetooth.status;
-    final bluetoothScanStatus = await Permission.bluetoothScan.status;
-    final bluetoothConnectStatus = await Permission.bluetoothConnect.status;
-    final locationStatus = await Permission.location.status;
+    final bluetoothStatus = await perm.Permission.bluetooth.status;
+    final bluetoothScanStatus = await perm.Permission.bluetoothScan.status;
+    final bluetoothConnectStatus = await perm.Permission.bluetoothConnect.status;
+    final locationStatus = await perm.Permission.location.status;
 
     return {
-      'bluetooth': bluetoothStatus == PermissionStatus.granted,
-      'bluetoothScan': bluetoothScanStatus == PermissionStatus.granted,
-      'bluetoothConnect': bluetoothConnectStatus == PermissionStatus.granted,
-      'location': locationStatus == PermissionStatus.granted,
+      'bluetooth': bluetoothStatus == perm.PermissionStatus.granted,
+      'bluetoothScan': bluetoothScanStatus == perm.PermissionStatus.granted,
+      'bluetoothConnect': bluetoothConnectStatus == perm.PermissionStatus.granted,
+      'location': locationStatus == perm.PermissionStatus.granted,
     };
   }
 
@@ -160,10 +243,10 @@ If permissions are still denied, you may need to:
       print('🔐 Starting permission check...');
 
       // Check and request Bluetooth permissions for modern Android
-      final bluetoothStatus = await Permission.bluetooth.status;
-      final bluetoothScanStatus = await Permission.bluetoothScan.status;
-      final bluetoothConnectStatus = await Permission.bluetoothConnect.status;
-      final locationStatus = await Permission.location.status;
+      final bluetoothStatus = await perm.Permission.bluetooth.status;
+      final bluetoothScanStatus = await perm.Permission.bluetoothScan.status;
+      final bluetoothConnectStatus = await perm.Permission.bluetoothConnect.status;
+      final locationStatus = await perm.Permission.location.status;
 
       print('🔐 Current permission status:');
       print('   Bluetooth: $bluetoothStatus');
@@ -172,10 +255,10 @@ If permissions are still denied, you may need to:
       print('   Location: $locationStatus');
 
       // Request Bluetooth permissions if not granted
-      if (bluetoothStatus != PermissionStatus.granted) {
+      if (bluetoothStatus != perm.PermissionStatus.granted) {
         print('🔐 Requesting Bluetooth permission...');
-        final result = await Permission.bluetooth.request();
-        if (result != PermissionStatus.granted) {
+        final result = await perm.Permission.bluetooth.request();
+        if (result != perm.PermissionStatus.granted) {
           print('❌ Bluetooth permission denied');
           print(
               '💡 Please enable "Nearby devices" permission in Settings > Apps > Kids Church Check-in > Permissions');
@@ -184,10 +267,10 @@ If permissions are still denied, you may need to:
       }
 
       // Request Bluetooth Scan permission if not granted (Android 12+)
-      if (bluetoothScanStatus != PermissionStatus.granted) {
+      if (bluetoothScanStatus != perm.PermissionStatus.granted) {
         print('🔐 Requesting Bluetooth Scan permission...');
-        final result = await Permission.bluetoothScan.request();
-        if (result != PermissionStatus.granted) {
+        final result = await perm.Permission.bluetoothScan.request();
+        if (result != perm.PermissionStatus.granted) {
           print('❌ Bluetooth Scan permission denied');
           print(
               '💡 Please enable "Nearby devices" permission in Settings > Apps > Kids Church Check-in > Permissions');
@@ -196,10 +279,10 @@ If permissions are still denied, you may need to:
       }
 
       // Request Bluetooth Connect permission if not granted (Android 12+)
-      if (bluetoothConnectStatus != PermissionStatus.granted) {
+      if (bluetoothConnectStatus != perm.PermissionStatus.granted) {
         print('🔐 Requesting Bluetooth Connect permission...');
-        final result = await Permission.bluetoothConnect.request();
-        if (result != PermissionStatus.granted) {
+        final result = await perm.Permission.bluetoothConnect.request();
+        if (result != perm.PermissionStatus.granted) {
           print('❌ Bluetooth Connect permission denied');
           print(
               '💡 Please enable "Nearby devices" permission in Settings > Apps > Kids Church Check-in > Permissions');
@@ -208,10 +291,10 @@ If permissions are still denied, you may need to:
       }
 
       // Check location permission (required for Bluetooth scanning on Android)
-      if (locationStatus != PermissionStatus.granted) {
+      if (locationStatus != perm.PermissionStatus.granted) {
         print('🔐 Requesting Location permission...');
-        final result = await Permission.location.request();
-        if (result != PermissionStatus.granted) {
+        final result = await perm.Permission.location.request();
+        if (result != perm.PermissionStatus.granted) {
           print(
               '❌ Location permission denied (required for Bluetooth scanning)');
           print(
@@ -221,16 +304,16 @@ If permissions are still denied, you may need to:
       }
 
       // Final check - verify all permissions are actually granted
-      final finalBluetoothStatus = await Permission.bluetooth.status;
-      final finalBluetoothScanStatus = await Permission.bluetoothScan.status;
+      final finalBluetoothStatus = await perm.Permission.bluetooth.status;
+      final finalBluetoothScanStatus = await perm.Permission.bluetoothScan.status;
       final finalBluetoothConnectStatus =
-          await Permission.bluetoothConnect.status;
-      final finalLocationStatus = await Permission.location.status;
+          await perm.Permission.bluetoothConnect.status;
+      final finalLocationStatus = await perm.Permission.location.status;
 
-      if (finalBluetoothStatus != PermissionStatus.granted ||
-          finalBluetoothScanStatus != PermissionStatus.granted ||
-          finalBluetoothConnectStatus != PermissionStatus.granted ||
-          finalLocationStatus != PermissionStatus.granted) {
+      if (finalBluetoothStatus != perm.PermissionStatus.granted ||
+          finalBluetoothScanStatus != perm.PermissionStatus.granted ||
+          finalBluetoothConnectStatus != perm.PermissionStatus.granted ||
+          finalLocationStatus != perm.PermissionStatus.granted) {
         print('❌ Some permissions are still not granted after request');
         print(
             '💡 Please manually enable permissions in Settings > Apps > Kids Church Check-in > Permissions');
@@ -255,7 +338,14 @@ If permissions are still denied, you may need to:
     try {
       print('🔍 Starting Bluetooth device scan...');
 
-      // First, get paired devices from print_bluetooth_thermal (this should always work)
+      // Request permissions FIRST before any Bluetooth API call (required on Android 12+)
+      final permissionsGranted = await _ensurePermissions();
+      if (!permissionsGranted) {
+        print('⚠️ Bluetooth permissions not granted - cannot scan. User must enable Nearby devices (and Location) in app Settings.');
+        return [];
+      }
+
+      // Now get paired devices from print_bluetooth_thermal
       List<BluetoothInfo> pairedDevices = [];
       try {
         pairedDevices = await PrintBluetoothThermal.pairedBluetooths;
@@ -271,67 +361,56 @@ If permissions are still denied, you may need to:
       String? permissionError;
 
       try {
-        // Ensure permissions are granted
-        final permissionsGranted = await _ensurePermissions();
+        print('🔐 Permissions granted, attempting BLE scan...');
+        print('🔍 Starting BLE scan...');
 
-        if (permissionsGranted) {
-          print('🔐 Permissions granted, attempting BLE scan...');
+        final List<BluetoothDevice> discoveredDevices = [];
 
-          // Start BLE scan
-          print('🔍 Starting BLE scan...');
-
-          final List<BluetoothDevice> discoveredDevices = [];
-
-          // Listen to scan results
-          final subscription = FlutterBluePlus.scanResults.listen((results) {
-            for (final result in results) {
-              if (!discoveredDevices
-                  .any((d) => d.remoteId == result.device.remoteId)) {
-                discoveredDevices.add(result.device);
-                print(
-                    '🔍 Found BLE device: ${result.device.platformName} (${result.device.remoteId})');
-              }
-            }
-          });
-
-          // Start the scan with shorter timeout
-          await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
-
-          // Wait for scan to complete (reduced from 10 to 6 seconds)
-          await Future.delayed(const Duration(seconds: 6));
-
-          // Cancel the subscription and stop scanning
-          await subscription.cancel();
-          await FlutterBluePlus.stopScan();
-
-          print('🔍 Found ${discoveredDevices.length} discovered BLE devices');
-
-          // Convert discovered devices to BluetoothInfo format
-          for (final device in discoveredDevices) {
-            final name = device.platformName.isNotEmpty
-                ? device.platformName
-                : device.remoteId.toString();
-
-            final bluetoothInfo = BluetoothInfo(
-              name: name,
-              macAdress: device.remoteId.toString(),
-            );
-
-            // Avoid duplicates
-            if (!availableDevices
-                .any((d) => d.macAdress == bluetoothInfo.macAdress)) {
-              availableDevices.add(bluetoothInfo);
-              print('🔍 Added available device: $name (${device.remoteId})');
+        // Listen to scan results
+        final subscription = FlutterBluePlus.scanResults.listen((results) {
+          for (final result in results) {
+            if (!discoveredDevices
+                .any((d) => d.remoteId == result.device.remoteId)) {
+              discoveredDevices.add(result.device);
+              print(
+                  '🔍 Found BLE device: ${result.device.platformName} (${result.device.remoteId})');
             }
           }
+        });
 
-          bleScanSuccessful = true;
-          print('✅ BLE scan completed successfully');
-        } else {
-          print('⚠️ Permissions not granted, skipping BLE scan');
-          permissionError =
-              'Bluetooth permissions not granted. Please enable "Nearby devices" and "Location" permissions in app settings.';
+        // Start the scan with shorter timeout
+        await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
+
+        // Wait for scan to complete
+        await Future.delayed(const Duration(seconds: 6));
+
+        // Cancel the subscription and stop scanning
+        await subscription.cancel();
+        await FlutterBluePlus.stopScan();
+
+        print('🔍 Found ${discoveredDevices.length} discovered BLE devices');
+
+        // Convert discovered devices to BluetoothInfo format
+        for (final device in discoveredDevices) {
+          final name = device.platformName.isNotEmpty
+              ? device.platformName
+              : device.remoteId.toString();
+
+          final bluetoothInfo = BluetoothInfo(
+            name: name,
+            macAdress: device.remoteId.toString(),
+          );
+
+          // Avoid duplicates
+          if (!availableDevices
+              .any((d) => d.macAdress == bluetoothInfo.macAdress)) {
+            availableDevices.add(bluetoothInfo);
+            print('🔍 Added available device: $name (${device.remoteId})');
+          }
         }
+
+        bleScanSuccessful = true;
+        print('✅ BLE scan completed successfully');
       } catch (e) {
         print('⚠️ BLE scan failed: $e');
         bleScanSuccessful = false;
@@ -392,6 +471,13 @@ If permissions are still denied, you may need to:
     }
   }
 
+  /// Parse USB vendor/product ID (decimal or hex string)
+  int? _parseUsbId(String s) {
+    if (s.isEmpty) return null;
+    final cleaned = s.toLowerCase().replaceFirst(RegExp(r'0x'), '');
+    return int.tryParse(s) ?? int.tryParse(cleaned, radix: 16);
+  }
+
   /// Check if a device name suggests it's a printer
   bool _isPrinterDevice(String name) {
     if (name.isEmpty) return false;
@@ -407,26 +493,28 @@ If permissions are still denied, you may need to:
         lowerName.contains('bluetooth') ||
         lowerName.contains('bt') ||
         lowerName.contains('esc') ||
-        lowerName.contains('pos');
+        lowerName.contains('rego') ||
+        lowerName.contains('ruigong') ||
+        lowerName.contains('rg-kl') ||
+        lowerName.contains('m90') ||
+        lowerName.contains('goojprt');
   }
 
   /// Connect to a Bluetooth device
-  Future<bool> connect(BluetoothInfo device) async {
+  Future<bool> connectBluetooth(BluetoothInfo device) async {
     try {
+      // Disconnect any existing connection first
+      await disconnect();
+
       print(
-          '🔗 Connecting to ${device.name ?? 'Unknown'} (${device.macAdress ?? 'No address'})...');
+          '🔗 Connecting to Bluetooth ${device.name ?? 'Unknown'} (${device.macAdress ?? 'No address'})...');
 
-      // Try to connect using print_bluetooth_thermal first
       bool result = false;
-
-      // Check if device is already paired by trying to connect
       try {
         result = await PrintBluetoothThermal.connect(
             macPrinterAddress: device.macAdress);
       } catch (e) {
         print('❌ print_bluetooth_thermal connection failed: $e');
-
-        // If print_bluetooth_thermal fails, try BLE connection
         try {
           final bleDevice = BluetoothDevice.fromId(device.macAdress);
           await bleDevice.connect();
@@ -434,25 +522,97 @@ If permissions are still denied, you may need to:
           result = true;
         } catch (bleError) {
           print('❌ BLE connection also failed: $bleError');
-          result = false;
         }
       }
 
       if (result) {
         _isConnected = true;
+        _connectionType = PrinterConnectionType.bluetooth;
         _connectedDevice = device;
-
-        // Save the successful connection to persistent storage
+        _connectedUsbName = null;
+        _connectedUsbVendorId = null;
+        _connectedUsbProductId = null;
         await _savePrinterConnection(device);
-
-        print('✅ Connected to ${device.name ?? 'Unknown'}');
+        print('✅ Connected to Bluetooth ${device.name ?? 'Unknown'}');
         return true;
-      } else {
-        print('❌ Failed to connect to ${device.name ?? 'Unknown'}');
-        return false;
       }
+      print('❌ Failed to connect to ${device.name ?? 'Unknown'}');
+      return false;
     } catch (e) {
       print('❌ Failed to connect: $e');
+      return false;
+    }
+  }
+
+  /// Connect to a USB printer
+  Future<bool> connectUsb(String name, String vendorId, String productId) async {
+    try {
+      await disconnect();
+
+      print('🔗 Connecting to USB printer $name ($vendorId:$productId)...');
+
+      final vid = _parseUsbId(vendorId);
+      final pid = _parseUsbId(productId);
+      if (vid == null || pid == null) {
+        print('❌ Invalid USB vendor/product ID: $vendorId, $productId');
+        return false;
+      }
+
+      final plugin = FlutterUsbThermalPlugin();
+      final result = await plugin.connect(vid, pid);
+
+      if (result == true) {
+        _isConnected = true;
+        _connectionType = PrinterConnectionType.usb;
+        _connectedDevice = null;
+        _connectedBleDevice = null;
+        _connectedUsbName = name;
+        _connectedUsbVendorId = vendorId;
+        _connectedUsbProductId = productId;
+        _usbPlugin = plugin;
+        await _saveUsbPrinterConnection(name, vendorId, productId);
+        print('✅ Connected to USB printer $name');
+        return true;
+      }
+      print('❌ Failed to connect to USB printer $name');
+      return false;
+    } catch (e) {
+      print('❌ Failed to connect to USB printer: $e');
+      return false;
+    }
+  }
+
+  /// Connect to a Bluetooth device (alias for backward compatibility)
+  Future<bool> connect(BluetoothInfo device) async =>
+      connectBluetooth(device);
+
+  /// Try to reconnect using the last saved printer (Bluetooth or USB).
+  /// Returns true if reconnection succeeded.
+  Future<bool> reconnect() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedType = prefs.getString(_printerTypeKey);
+      final savedName = prefs.getString(_printerNameKey);
+      if (savedName == null || savedName.isEmpty) return false;
+
+      if (savedType == 'usb') {
+        final vendorId = prefs.getString(_printerUsbVendorIdKey);
+        final productId = prefs.getString(_printerUsbProductIdKey);
+        if (vendorId != null &&
+            productId != null &&
+            vendorId.isNotEmpty &&
+            productId.isNotEmpty) {
+          return await connectUsb(savedName, vendorId, productId);
+        }
+        return false;
+      }
+
+      final savedAddress = prefs.getString(_printerAddressKey);
+      if (savedAddress == null || savedAddress.isEmpty) return false;
+      return await connectBluetooth(
+          BluetoothInfo(name: savedName, macAdress: savedAddress));
+    } catch (e) {
+      print('❌ Reconnect failed: $e');
       return false;
     }
   }
@@ -460,29 +620,78 @@ If permissions are still denied, you may need to:
   /// Disconnect from the current device
   Future<void> disconnect() async {
     try {
-      if (_connectedDevice != null) {
-        print('🔌 Disconnecting from ${_connectedDevice!.name ?? 'Unknown'}');
+      if (!_isConnected) return;
 
-        // Disconnect from BLE device if connected
+      if (_connectionType == PrinterConnectionType.usb) {
+        print('🔌 Disconnecting from USB printer $_connectedUsbName');
+        _usbPlugin = null;
+        _connectedUsbName = null;
+        _connectedUsbVendorId = null;
+        _connectedUsbProductId = null;
+      } else if (_connectedDevice != null) {
+        print('🔌 Disconnecting from ${_connectedDevice!.name ?? 'Unknown'}');
         if (_connectedBleDevice != null) {
           await _connectedBleDevice!.disconnect();
           _connectedBleDevice = null;
         }
-
-        // Disconnect from print_bluetooth_thermal
         await PrintBluetoothThermal.disconnect;
-
-        _isConnected = false;
         _connectedDevice = null;
-
-        // Clear the saved connection from persistent storage
-        await _clearSavedConnection();
-
-        print('✅ Disconnected successfully');
       }
+
+      _isConnected = false;
+      _connectionType = null;
+      await _clearSavedConnection();
+      print('✅ Disconnected successfully');
     } catch (e) {
       print('❌ Error disconnecting: $e');
     }
+  }
+
+  static const MethodChannel _usbChannel =
+      MethodChannel('com.kidschurch.checkin/usb');
+
+  /// Get available USB printers (devices already attached via USB).
+  /// Tries plugin first; if empty, uses native UsbManager.getDeviceList() so
+  /// OTG printers (e.g. Goojprt MTP-3) are detected on all devices.
+  Future<List<UsbDevice>> getAvailableUsbDevices() async {
+    try {
+      print('🔍 Scanning for USB printers...');
+      final plugin = FlutterUsbThermalPlugin();
+      List<UsbDevice> devices = await plugin.getUSBDeviceList();
+      if (devices.isEmpty) {
+        try {
+          final dynamic raw =
+              await _usbChannel.invokeMethod('getUsbDeviceList');
+          if (raw is List && raw.isNotEmpty) {
+            devices = raw
+                .map((e) => _mapToUsbDevice(e as Map<dynamic, dynamic>))
+                .toList();
+            print('🔍 Native USB: found ${devices.length} device(s)');
+          }
+        } catch (e) {
+          print('⚠️ Native USB fallback error: $e');
+        }
+      }
+      print('🔍 Found ${devices.length} USB device(s) total');
+      return devices;
+    } catch (e) {
+      print('⚠️ USB discovery error: $e');
+      return [];
+    }
+  }
+
+  static UsbDevice _mapToUsbDevice(Map<dynamic, dynamic> map) {
+    return UsbDevice(
+      manufacturer: (map['manufacturer'] as String?) ?? '',
+      productName: (map['productName'] as String?) ?? 'USB Device',
+      vendorId: (map['vendorId'] as String?) ?? '0',
+      productId: (map['productId'] as String?) ?? '0',
+    );
+  }
+
+  /// Get available USB printers (alias for compatibility)
+  Future<List<UsbDevice>> getAvailableUsbDevicesWithTimeout() async {
+    return getAvailableUsbDevices();
   }
 
   /// Print check-in sticker
@@ -490,14 +699,13 @@ If permissions are still denied, you may need to:
     required Child child,
     required CheckInSession session,
   }) async {
-    if (!_isConnected || _connectedDevice == null) {
+    if (!_isConnected) {
       throw Exception('Printer not connected');
     }
 
     try {
       print('🖨️ Printing check-in sticker for ${child.fullName}...');
 
-      // Create ESC/POS commands for the check-in sticker
       final commands = await _createCheckInStickerCommands(
         childName: child.fullName,
         childId: child.id,
@@ -507,16 +715,13 @@ If permissions are still denied, you may need to:
         checkinTime: session.checkinTime,
       );
 
-      // Send the ESC/POS commands to the printer using print_bluetooth_thermal
-      final result = await PrintBluetoothThermal.writeBytes(commands);
-
-      if (result == true) {
+      final result = await _sendBytes(commands);
+      if (result) {
         print('✅ Check-in sticker printed successfully');
         return true;
-      } else {
-        print('❌ Print failed with result: $result');
-        return false;
       }
+      print('❌ Print failed');
+      return false;
     } catch (e) {
       print('❌ Failed to print sticker: $e');
       throw Exception('Failed to print sticker: $e');
@@ -532,14 +737,13 @@ If permissions are still denied, you may need to:
     required String serviceName,
     required DateTime checkInTime,
   }) async {
-    if (!_isConnected || _connectedDevice == null) {
+    if (!_isConnected) {
       throw Exception('Printer not connected');
     }
 
     try {
       print('🖨️ Printing guardian check-in sticker for $children...');
 
-      // Create ESC/POS commands for the guardian check-in sticker
       final commands = await _createGuardianCheckInStickerCommands(
         childIds: childIds,
         children: children,
@@ -549,20 +753,31 @@ If permissions are still denied, you may need to:
         checkInTime: checkInTime,
       );
 
-      // Send the ESC/POS commands to the printer using print_bluetooth_thermal
-      final result = await PrintBluetoothThermal.writeBytes(commands);
-
-      if (result == true) {
+      final result = await _sendBytes(commands);
+      if (result) {
         print('✅ Guardian check-in sticker printed successfully');
         return true;
-      } else {
-        print('❌ Print failed with result: $result');
-        return false;
       }
+      print('❌ Print failed');
+      return false;
     } catch (e) {
       print('❌ Failed to print guardian check-in sticker: $e');
       throw Exception('Failed to print guardian check-in sticker: $e');
     }
+  }
+
+  /// Send raw bytes to the connected printer (Bluetooth or USB)
+  Future<bool> _sendBytes(List<int> commands) async {
+    if (_connectionType == PrinterConnectionType.usb && _usbPlugin != null) {
+      try {
+        await _usbPlugin!.write(Uint8List.fromList(commands));
+        return true;
+      } catch (e) {
+        print('❌ USB write error: $e');
+        return false;
+      }
+    }
+    return await PrintBluetoothThermal.writeBytes(commands);
   }
 
   /// Create ESC/POS commands for check-in sticker
@@ -785,8 +1000,8 @@ If permissions are still denied, you may need to:
       // Load ESC/POS capability profile
       final profile = await CapabilityProfile.load();
 
-      // Create generator with 58mm paper size (common for thermal printers)
-      final generator = Generator(PaperSize.mm58, profile);
+      // M90 / REGO RG-KL532A-H uses 80mm paper (576 dots/line, 72mm effective)
+      final generator = Generator(PaperSize.mm80, profile);
 
       // Convert image to ESC/POS raster commands
       final List<int> rasterCommands = generator.imageRaster(decoded);

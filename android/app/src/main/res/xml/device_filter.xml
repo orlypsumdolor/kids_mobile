@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- USB device filter for kiosk peripherals.
+     Vendor IDs are in decimal. Covers thermal printers + barcode scanners. -->
+<resources>
+    <!-- ===== Thermal Printers ===== -->
+    <!-- QinHeng (CH340) - used by many thermal printers including REGO/Ruigong -->
+    <usb-device vendor-id="6790" />
+    <!-- Silicon Labs (CP210x) -->
+    <usb-device vendor-id="4292" />
+    <!-- Prolific (PL2303) -->
+    <usb-device vendor-id="1659" />
+    <!-- FTDI -->
+    <usb-device vendor-id="1027" />
+    <!-- Epson -->
+    <usb-device vendor-id="1208" />
+    <!-- STMicroelectronics -->
+    <usb-device vendor-id="1155" />
+    <!-- Netchip -->
+    <usb-device vendor-id="1317" />
+    <!-- WinBond / other -->
+    <usb-device vendor-id="1046" />
+    <!-- ICS -->
+    <usb-device vendor-id="4070" />
+    <!-- NXP -->
+    <usb-device vendor-id="8137" />
+    <!-- Zebra (0x1504) -->
+    <usb-device vendor-id="5380" />
+    <!-- Brother (0x04f9) -->
+    <usb-device vendor-id="1273" />
+    <!-- Beijing Ruigong / REGO (0x0483 = STM-based, 0x1a86 = CH340-based) -->
+    <usb-device vendor-id="1155" />
+    <!-- Generic USB Printer class devices (0x0525) -->
+    <usb-device vendor-id="1317" />
+    <!-- Bematech / Custom (0x0dd4) -->
+    <usb-device vendor-id="3540" />
+    <!-- Star Micronics (0x0519) -->
+    <usb-device vendor-id="1305" />
+    <!-- Citizen (0x1d90) -->
+    <usb-device vendor-id="7568" />
+
+    <!-- ===== Barcode Scanners (M7710 / embedded kiosk scanners) ===== -->
+    <!-- Mindeo / MS (common kiosk scanner OEM, 0x27DD) -->
+    <usb-device vendor-id="10205" />
+    <!-- Newland (0x1EAB) -->
+    <usb-device vendor-id="7851" />
+    <!-- Honeywell (0x0C2E) -->
+    <usb-device vendor-id="3118" />
+    <!-- Zebra/Symbol (0x05E0) -->
+    <usb-device vendor-id="1504" />
+    <!-- Datalogic (0x05F9) -->
+    <usb-device vendor-id="1529" />
+</resources>
