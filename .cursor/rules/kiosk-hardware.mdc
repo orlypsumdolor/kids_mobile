@@ -1,0 +1,81 @@
+---
+description: Self-service kiosk hardware specifications — target devices, thermal printer, and barcode scanner
+alwaysApply: true
+---
+
+# Target Hardware: Self-Service Kiosk (15.6" / 21.5")
+
+This app runs on self-service kiosk terminals with the following specs:
+
+## Kiosk Main Unit
+
+| Spec | Detail |
+|------|--------|
+| Processor | Quad-core RK3568, Cortex-A55, up to 2.0 GHz |
+| OS | Android 11.0 |
+| Memory | 2 GB / 4 GB / 8 GB DDR; 16 GB / 32 GB / 64 GB / 128 GB eMMC |
+| Display (15.6") | 1920×1080 LCD TFT A-grade, 300 cd/m², 800:1 contrast, 16:9, 16.7M colors, 60 000 h panel life |
+| Display (21.5") | 1920×1080 LCD TFT A-grade, 350 cd/m², 1000:1 contrast, 16:9, 16.7M colors, 60 000 h panel life |
+| Touch | 10-point capacitive |
+| Connectivity | Wi-Fi, Ethernet, 4G LTE/Bluetooth (optional) |
+| Ports | 1× DC-in, 2× USB, 1× RJ45, 1× HDMI, 1× Audio jack, 1× TF, 1× SIM |
+| Power | 12 V / 3 A |
+| Peripherals | QR code scanner (included), 80 mm thermal printer (included), credit card terminal holder (included) |
+| Operating temp | 0 – 50 °C |
+| Storage temp | −20 – 60 °C |
+
+## M90 Thermal Printer (80 mm)
+
+Built-in receipt printer for the kiosk.
+
+| Spec | Detail |
+|------|--------|
+| Print method | Line thermal |
+| Paper width | 80 mm |
+| Effective print width | 72 mm max |
+| Print speed | 150 mm/s max |
+| Resolution | 8 dots/mm, 576 dots/line |
+| Cutter | Half cut / full cut, 1 000 000 cycle life |
+| Print head life | 100 km |
+| Interfaces | RS-232 serial, USB, cash drawer |
+| Voltage | DC 12 V or DC 24 V (±10 %) |
+| Current | 12 V/4 A avg, 12 V/13 A peak (or 24 V equivalents) |
+| Barcode support | EAN-8, EAN-13, CODE 39, CODE 128, QR Code |
+| Character sets | ASCII 12×24, GBK-18030 24×32, Simplified/Traditional Chinese, Korean, Japanese, Vietnamese, Cyrillic |
+| Max paper roll diameter | 80 mm |
+| Dimensions | 115 × 85 × 132 mm (W×D×H) |
+| Weight | ~0.45 kg (without paper) |
+| Driver support | Windows XP/7/8, Linux, Android |
+| Operating temp | −10 – 50 °C |
+
+## M7710 Barcode/QR Scanner
+
+Embedded 2D scanning engine for QR-code and barcode reading.
+
+| Spec | Detail |
+|------|--------|
+| Sensor | 640×480 CMOS |
+| Lighting | White LED (6500 K) |
+| 2D codes | PDF417, Micro PDF417, Data Matrix, QR Code, Micro QR, MaxiCode, Aztec, Han Xin Code |
+| 1D codes | Code 128, EAN-13, EAN-8, Code 39, UPC-A, UPC-E, Codabar, Code 93, Code 11, Interleaved 2of5, ISBN, UCC/EAN-128, GS1 Databar, MSI-Plessey, etc. |
+| Resolution | ≥ 4 mil (7710) / ≥ 3 mil (7710S) |
+| Alipay depth of field | 40 – 360 mm (5.5" phone screen) |
+| WeChat depth of field | 35 – 330 mm (5.5" phone screen) |
+| View angle | 60° horizontal, 48° vertical |
+| Tilt/rotation | ±60° tilt, ±55° deflection, 360° rotation |
+| Interfaces | TTL/RS-232, USB, USB COM, TTL 3.3 V, TTL 5 V |
+| Voltage | 3.3 – 6 V |
+| Current | < 190 mA at 5 V |
+| Dimensions | 64.8 × 60.5 × 21.2 mm |
+| Weight | 30 g |
+| Operating temp | −20 – 60 °C |
+| Ambient light tolerance | up to 100 000 LUX |
+| Drop resistance | 1.2 m to concrete |
+
+## Development Notes
+
+- Target Android 11 on ARM (Cortex-A55 / RK3568). Avoid APIs unavailable below Android 11.
+- The kiosk has a fixed orientation and large touch display — design for landscape or portrait kiosk mode, not handheld phone use.
+- The built-in scanner reads both screen-displayed and paper QR/barcodes. Payment codes (Alipay, WeChat) are supported natively.
+- Thermal printer uses ESC/POS-compatible commands over serial or USB.
+- Available memory may be as low as 2 GB — keep the app memory-efficient.

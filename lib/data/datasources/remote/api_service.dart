@@ -8,6 +8,7 @@ import '../../../domain/entities/guardian.dart';
 class ApiService {
   late final Dio _dio;
   String? _authToken;
+  bool _isRefreshing = false;
 
   ApiService() {
     _dio = Dio(BaseOptions(
@@ -19,14 +20,13 @@ class ApiService {
       },
     ));
 
-    // Add interceptors
     _dio.interceptors.add(LogInterceptor(
       requestBody: true,
       responseBody: true,
       logPrint: (obj) => print(obj),
     ));
 
-    _dio.interceptors.add(InterceptorsWrapper(
+    _dio.interceptors.add(QueuedInterceptorsWrapper(
       onRequest: (options, handler) async {
         if (_authToken != null) {
           options.headers['Authorization'] = 'Bearer $_authToken';
@@ -34,13 +34,45 @@ class ApiService {
         handler.next(options);
       },
       onError: (error, handler) async {
-        if (error.response?.statusCode == 401) {
-          // Handle token refresh or logout
-          _authToken = null;
+        if (error.response?.statusCode == 401 &&
+            !error.requestOptions.path.contains(ApiConstants.login) &&
+            !error.requestOptions.path.contains(ApiConstants.refresh)) {
+          if (!_isRefreshing && _authToken != null) {
+            _isRefreshing = true;
+            try {
+              final refreshResponse = await _dio.post(
+                ApiConstants.refresh,
+                options: Options(
+                  headers: {'Authorization': 'Bearer $_authToken'},
+                ),
+              );
+              if (refreshResponse.data['success'] == true &&
+                  refreshResponse.data['data']?['token'] != null) {
+                _authToken = refreshResponse.data['data']['token'];
+                _onTokenRefreshed?.call(_authToken!);
+                _isRefreshing = false;
+
+                final retryOptions = error.requestOptions;
+                retryOptions.headers['Authorization'] = 'Bearer $_authToken';
+                final retryResponse = await _dio.fetch(retryOptions);
+                return handler.resolve(retryResponse);
+              }
+            } catch (_) {
+              _authToken = null;
+              _isRefreshing = false;
+            }
+          }
+          _isRefreshing = false;
         }
         handler.next(error);
       },
     ));
+  }
+
+  void Function(String newToken)? _onTokenRefreshed;
+
+  void setOnTokenRefreshed(void Function(String newToken) callback) {
+    _onTokenRefreshed = callback;
   }
 
   void setAuthToken(String token) {

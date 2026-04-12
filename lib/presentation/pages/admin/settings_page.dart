@@ -833,40 +833,13 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     try {
-      // Create a mock child and session for testing
-      final mockChild = Child(
-        id: 'test-001',
-        fullName: 'Test Child',
-        dateOfBirth: DateTime(2020, 1, 1),
-        gender: 'Unknown',
-        ageGroup: 'Preschool',
-        guardianIds: const ['guardian-001'],
-        qrCode: 'test-qr-001',
-        rfidTag: 'test-rfid-001',
-        isActive: true,
-        currentlyCheckedIn: false,
-        createdBy: 'system',
-        updatedBy: 'system',
-      );
-
-      final mockSession = CheckInSession(
-        id: 'session-001',
-        serviceSessionId: 'Sunday Service',
-        date: DateTime.now(),
-        createdBy: 'system',
-        checkedInChildren: const ['test-001'],
-        isActive: true,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
-      // For testing, we'll use the guardian check-in sticker method
+      // Test with two realistic child names to verify sticker sizing
       final success = await _printerService.printGuardianCheckInSticker(
-        childIds: [mockChild.id],
-        children: [mockChild.fullName],
-        pickupCodes: ['TEST123'],
+        childIds: ['test-001', 'test-002'],
+        children: ['Juan Dela Cruz Jr.', 'Maria Dela Cruz'],
+        pickupCodes: ['ABC123', 'XYZ789'],
         guardianQrCode: 'GUARDIAN-001',
-        serviceName: mockSession.serviceSessionId,
+        serviceName: 'Sunday Service',
         checkInTime: DateTime.now(),
       );
 

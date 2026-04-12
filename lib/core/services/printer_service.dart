@@ -780,7 +780,77 @@ If permissions are still denied, you may need to:
     return await PrintBluetoothThermal.writeBytes(commands);
   }
 
-  /// Create ESC/POS commands for check-in sticker
+  /// Render sticker text layout as a landscape bitmap, rotate 90° clockwise,
+  /// then return ESC/POS raster commands.
+  ///
+  /// Sticker is ~50mm (short, feeds first) x ~95mm (long, across paper).
+  /// At 8 dots/mm: short side ≈ 400 dots, long side ≈ 576 dots (paper width).
+  ///
+  /// We render text in landscape (long x short), then rotate 90° CW so that:
+  ///   rotated width  = 400 dots  → fits within 576-dot paper width
+  ///   rotated height = 576+ dots → feeds out as the long dimension
+  Future<List<int>> _renderStickerAsRaster(List<_StickerLine> lines) async {
+    // Landscape canvas: long side across, short side down
+    // Sticker is ~50mm x ~95mm → 400 x 760 dots at 8 dots/mm
+    const int canvasW = 760; // sticker long side (~95mm)
+    const int canvasH = 400; // sticker short side (~50mm)
+    const double padding = 16;
+
+    // Paint text onto landscape canvas
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    // White background
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, canvasW.toDouble(), canvasH.toDouble()),
+      Paint()..color = const Color(0xFFFFFFFF),
+    );
+
+    // Measure total text block height
+    double totalTextHeight = 0;
+    for (final line in lines) {
+      totalTextHeight += line.fontSize + 6;
+    }
+
+    // Center vertically with a downward nudge (+30) to sit better on the sticker
+    double y = ((canvasH - totalTextHeight) / 2) + 30;
+    if (y < padding) y = padding;
+
+    for (final line in lines) {
+      final textStyle = ui.TextStyle(
+        color: const Color(0xFF000000),
+        fontSize: line.fontSize,
+        fontWeight: line.bold ? FontWeight.bold : FontWeight.normal,
+      );
+      final paragraphBuilder = ui.ParagraphBuilder(
+        ui.ParagraphStyle(textAlign: TextAlign.center),
+      )
+        ..pushStyle(textStyle)
+        ..addText(line.text);
+      final paragraph = paragraphBuilder.build();
+      paragraph.layout(ui.ParagraphConstraints(width: canvasW - padding * 2));
+      canvas.drawParagraph(paragraph, Offset(padding, y));
+      y += line.fontSize + 6;
+    }
+
+    final picture = recorder.endRecording();
+    final landscapeImg = await picture.toImage(canvasW, canvasH);
+    final byteData =
+        await landscapeImg.toByteData(format: ui.ImageByteFormat.png);
+    final pngBytes = byteData!.buffer.asUint8List();
+
+    // Decode, rotate 90° clockwise, re-encode
+    final decoded = img.decodeImage(pngBytes);
+    if (decoded == null) throw Exception('Failed to decode sticker image');
+    final rotated = img.copyRotate(decoded, 90);
+
+    print('🖨️ Sticker rendered ${canvasW}x$canvasH → rotated to ${rotated.width}x${rotated.height}');
+
+    final rotatedPng = Uint8List.fromList(img.encodePng(rotated));
+    return _imageToEscPosCommands(rotatedPng);
+  }
+
+  /// Create raster commands for check-in sticker.
   Future<List<int>> _createCheckInStickerCommands({
     required String childName,
     required String childId,
@@ -789,63 +859,20 @@ If permissions are still denied, you may need to:
     required String serviceSession,
     required DateTime checkinTime,
   }) async {
-    // Simple text-based commands for thermal printer
-    final commands = <int>[];
+    final lines = <_StickerLine>[
+      _StickerLine('KIDS CHURCH CHECK-IN', fontSize: 32, bold: true),
+      _StickerLine(childName, fontSize: 52, bold: true),
+      _StickerLine(pickupCode, fontSize: 48, bold: true),
+      _StickerLine('$serviceSession  ${_formatTime(checkinTime)}', fontSize: 24),
+    ];
 
-    // Initialize printer
-    commands.addAll([27, 64]); // ESC @ - Initialize printer
-    commands.addAll([27, 97, 1]); // ESC a 1 - Center alignment
-
-    // Header
-    commands.addAll([27, 33, 48]); // ESC ! 0 - Normal text size
-    commands.addAll(_textToBytes('KIDS CHURCH CHECK-IN\n\n'));
-
-    // Child information
-    commands.addAll([27, 33, 16]); // ESC ! 16 - Bold text
-    commands.addAll(_textToBytes('CHILD:\n'));
-    commands.addAll([27, 33, 32]); // ESC ! 32 - Double height
-    commands.addAll(_textToBytes('$childName\n\n'));
-
-    // Pickup code (large and bold)
-    commands.addAll([27, 33, 16]); // ESC ! 16 - Bold text
-    commands.addAll(_textToBytes('PICKUP CODE:\n'));
-    commands.addAll([27, 33, 48]); // ESC ! 48 - Double height and width
-    commands.addAll(_textToBytes('$pickupCode\n\n'));
-
-    // QR Code image (guardianId|pickupCode)
-    commands.addAll([27, 33, 0]); // ESC ! 0 - Normal text
-    commands.addAll(_textToBytes('QR CODE:\n'));
-
-    // Add spacing and center the QR code
-    commands.addAll([27, 97, 1]); // ESC a 1 - Center alignment
-    commands.addAll(_textToBytes('\n')); // Extra spacing
-
-    // Add QR code bitmap commands
-    final qrData = '$guardianId|$pickupCode';
-    final qrImage = await _generateQRCodeImage(qrData, size: 256);
-    final qrCommands = await _imageToEscPosCommands(qrImage);
-    commands.addAll(qrCommands);
-
-    // Reset alignment and add spacing after QR code
-    commands.addAll([27, 97, 0]); // ESC a 0 - Left alignment
-    commands.addAll(_textToBytes('\n\n'));
-
-    // Service and time
-    commands.addAll([27, 33, 0]); // ESC ! 0 - Normal text
-    commands.addAll(_textToBytes('SERVICE: $serviceSession\n'));
-    commands.addAll(_textToBytes('TIME: ${_formatTime(checkinTime)}\n\n'));
-
-    // Footer
-    commands
-        .addAll(_textToBytes('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'));
-
-    // Cut paper
-    commands.addAll([29, 86, 66, 0]); // GS V B 0 - Full cut
-
-    return commands;
+    final raster = await _renderStickerAsRaster(lines);
+    final profile = await CapabilityProfile.load();
+    final gen = Generator(PaperSize.mm80, profile);
+    return [...raster, ...gen.cut()];
   }
 
-  /// Create ESC/POS commands for guardian check-in sticker
+  /// Create raster commands for guardian check-in sticker.
   Future<List<int>> _createGuardianCheckInStickerCommands({
     required List<String> childIds,
     required List<String> children,
@@ -854,71 +881,23 @@ If permissions are still denied, you may need to:
     required String serviceName,
     required DateTime checkInTime,
   }) async {
-    // Simple text-based commands for thermal printer
-    final commands = <int>[];
+    final lines = <_StickerLine>[
+      _StickerLine('KIDS CHURCH PICKUP SLIP', fontSize: 32, bold: true),
+    ];
 
-    // Initialize printer
-    commands.addAll([27, 64]); // ESC @ - Initialize printer
-    commands.addAll([27, 97, 1]); // ESC a 1 - Center alignment
-
-    // Header
-    commands.addAll([27, 33, 48]); // ESC ! 48 - Double height and width
-    commands.addAll(_textToBytes('KIDS CHURCH\n'));
-    commands.addAll([27, 33, 16]); // ESC ! 16 - Bold text
-    commands.addAll(_textToBytes('GUARDIAN PICKUP SLIP\n\n'));
-
-    // Child name loop to print the names of the children
     for (int i = 0; i < children.length; i++) {
-      commands.addAll([27, 33, 16]); // ESC ! 16 - Bold text
-      commands.addAll(_textToBytes('CHILD:\n'));
-      commands.addAll([27, 33, 48]); // ESC ! 48 - Double height and width
-      commands.addAll(_textToBytes('${children[i]}\n\n'));
+      lines.add(_StickerLine(children[i], fontSize: 48, bold: true));
+      if (i < pickupCodes.length) {
+        lines.add(_StickerLine('CODE: ${pickupCodes[i]}', fontSize: 28, bold: true));
+      }
     }
 
-    // Pickup code loop to print the pickup codes of the children
-    for (int i = 0; i < pickupCodes.length; i++) {
-      commands.addAll([27, 33, 16]); // ESC ! 16 - Bold text
-      commands.addAll(_textToBytes('PICKUP CODE:\n'));
-      commands.addAll([27, 33, 48]); // ESC ! 48 - Double height and width
-      commands.addAll(_textToBytes('${pickupCodes[i]}\n\n'));
-    }
+    lines.add(_StickerLine('$serviceName  ${_formatTime(checkInTime)}', fontSize: 24));
 
-    // Add spacing and center the QR code
-    commands.addAll([27, 97, 1]); // ESC a 1 - Center alignment
-    commands.addAll(_textToBytes('\n')); // Extra spacing
-
-    // format should be on jsonstring format
-    final qrData = json.encode({
-      'guardianQrCode': guardianQrCode,
-      'pickupCodes': pickupCodes,
-      'childIds': childIds,
-    });
-
-    final qrImage = await _generateQRCodeImage(qrData, size: 256);
-    final qrCommands = await _imageToEscPosCommands(qrImage);
-    commands.addAll(qrCommands);
-
-    // Reset alignment and add spacing after QR code
-    commands.addAll([27, 97, 0]); // ESC a 0 - Left alignment
-    commands.addAll(_textToBytes('\n\n'));
-
-    // Service and time
-    commands.addAll(_textToBytes('SERVICE: $serviceName\n'));
-    commands.addAll(_textToBytes('TIME: ${_formatTime(checkInTime)}\n\n'));
-
-    // Footer
-    commands
-        .addAll(_textToBytes('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'));
-
-    // Cut paper
-    commands.addAll([29, 86, 66, 0]); // GS V B 0 - Full cut
-
-    return commands;
-  }
-
-  /// Convert text to bytes for ESC/POS commands
-  List<int> _textToBytes(String text) {
-    return text.codeUnits;
+    final raster = await _renderStickerAsRaster(lines);
+    final profile = await CapabilityProfile.load();
+    final gen = Generator(PaperSize.mm80, profile);
+    return [...raster, ...gen.cut()];
   }
 
   /// Format time for display
@@ -1040,4 +1019,12 @@ If permissions are still denied, you may need to:
       return <BluetoothInfo>[];
     }
   }
+}
+
+class _StickerLine {
+  final String text;
+  final double fontSize;
+  final bool bold;
+
+  const _StickerLine(this.text, {this.fontSize = 24, this.bold = false});
 }

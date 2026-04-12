@@ -13,7 +13,11 @@ class AuthRepositoryImpl implements AuthRepository {
     required ApiService apiService,
     required PreferencesHelper preferencesHelper,
   })  : _apiService = apiService,
-        _preferencesHelper = preferencesHelper;
+        _preferencesHelper = preferencesHelper {
+    _apiService.setOnTokenRefreshed((newToken) {
+      _preferencesHelper.setAuthToken(newToken);
+    });
+  }
 
   @override
   Future<User> login(String username, String password) async {
