@@ -503,8 +503,8 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
       );
 
       // Prepare data for printing
-      final childrenNames = records.map((record) {
-        final child = _linkedChildren.firstWhere(
+      final matchedChildren = records.map((record) {
+        return _linkedChildren.firstWhere(
           (c) => c.id == record.childId,
           orElse: () => Child(
             id: record.childId,
@@ -517,25 +517,26 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
             currentlyCheckedIn: false,
           ),
         );
-        return '${child.firstName} ${child.lastName}';
       }).toList();
 
+      final childrenNames = matchedChildren.map((c) => c.fullName).toList();
+      final ageGroups = matchedChildren.map((c) => c.ageGroup).toList();
       final pickupCodes = records.map((record) => record.pickupCode).toList();
-
       final childIds = records.map((record) => record.childId).toList();
 
-      print('🎫 Printing sticker for ${childrenNames.length} children...');
+      print('🎫 Printing stickers for ${childrenNames.length} children...');
       print('   👶 Children: ${childrenNames.join(', ')}');
       print('   📍 Pickup Codes: ${pickupCodes.join(', ')}');
       print('   👤 Guardian: ${_scannedGuardian?.fullName}');
       print('   ⛪ Service: ${service.name}');
       print('   🕐 Check-in Time: ${records.first.checkInTime}');
 
-      // Print the single sticker with all children
+      // Print name tags (1 per child) + pickup slip (1 total)
       final success = await printerService.printGuardianCheckInSticker(
         childIds: childIds,
         children: childrenNames,
         pickupCodes: pickupCodes,
+        ageGroups: ageGroups,
         guardianQrCode: _scannedGuardian?.id ?? 'Unknown',
         serviceName: service.name,
         checkInTime: records.first.checkInTime,

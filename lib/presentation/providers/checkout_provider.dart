@@ -39,7 +39,11 @@ class CheckoutProvider extends ChangeNotifier with ApiResponseMixin {
   Map<String, dynamic>? get scannedQrData => _scannedQrData;
   List<Map<String, dynamic>>? get childInfo => _childInfo;
 
-  /// Fetch child names by IDs
+  /// Fetch child names by IDs (public for checkout page)
+  Future<List<Map<String, dynamic>>> fetchChildNamesPublic(
+      List<String> childIds) =>
+      _fetchChildNames(childIds);
+
   Future<List<Map<String, dynamic>>> _fetchChildNames(
       List<String> childIds) async {
     final List<Map<String, dynamic>> childInfo = [];

@@ -833,11 +833,12 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     try {
-      // Test with two realistic child names to verify sticker sizing
+      // Test: 2 name tags + 1 pickup slip with QR code
       final success = await _printerService.printGuardianCheckInSticker(
         childIds: ['test-001', 'test-002'],
         children: ['Juan Dela Cruz Jr.', 'Maria Dela Cruz'],
         pickupCodes: ['ABC123', 'XYZ789'],
+        ageGroups: ['Preschool', 'Toddlers'],
         guardianQrCode: 'GUARDIAN-001',
         serviceName: 'Sunday Service',
         checkInTime: DateTime.now(),

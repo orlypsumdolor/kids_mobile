@@ -728,11 +728,14 @@ If permissions are still denied, you may need to:
     }
   }
 
-  /// Print guardian-based check-in sticker with pickup code, QR code, and child info
+  /// Print the full guardian check-in flow:
+  ///   1. One name tag sticker per child (big name, age group, service)
+  ///   2. One pickup slip with QR code + text codes for the guardian
   Future<bool> printGuardianCheckInSticker({
     required List<String> childIds,
     required List<String> children,
     required List<String> pickupCodes,
+    required List<String> ageGroups,
     required String guardianQrCode,
     required String serviceName,
     required DateTime checkInTime,
@@ -742,9 +745,26 @@ If permissions are still denied, you may need to:
     }
 
     try {
-      print('🖨️ Printing guardian check-in sticker for $children...');
+      // Step 1: Print a name tag sticker for each child
+      for (int i = 0; i < children.length; i++) {
+        print('🖨️ Printing name tag ${i + 1}/${children.length}: ${children[i]}');
+        final nameTagCommands = await _createNameTagCommands(
+          childName: children[i],
+          ageGroup: i < ageGroups.length ? ageGroups[i] : '',
+          serviceName: serviceName,
+          checkInTime: checkInTime,
+        );
+        final tagResult = await _sendBytes(nameTagCommands);
+        if (!tagResult) {
+          print('❌ Failed to print name tag for ${children[i]}');
+        }
+        await Future.delayed(const Duration(seconds: 2));
+      }
 
-      final commands = await _createGuardianCheckInStickerCommands(
+      // Step 2: Print the pickup slip with QR code
+      await Future.delayed(const Duration(seconds: 2));
+      print('🖨️ Printing pickup slip with QR code...');
+      final pickupSlipCommands = await _createPickupSlipCommands(
         childIds: childIds,
         children: children,
         pickupCodes: pickupCodes,
@@ -752,17 +772,17 @@ If permissions are still denied, you may need to:
         serviceName: serviceName,
         checkInTime: checkInTime,
       );
+      final slipResult = await _sendBytes(pickupSlipCommands);
 
-      final result = await _sendBytes(commands);
-      if (result) {
-        print('✅ Guardian check-in sticker printed successfully');
+      if (slipResult) {
+        print('✅ All stickers printed successfully');
         return true;
       }
-      print('❌ Print failed');
+      print('❌ Pickup slip print failed');
       return false;
     } catch (e) {
-      print('❌ Failed to print guardian check-in sticker: $e');
-      throw Exception('Failed to print guardian check-in sticker: $e');
+      print('❌ Failed to print stickers: $e');
+      throw Exception('Failed to print stickers: $e');
     }
   }
 
@@ -780,90 +800,151 @@ If permissions are still denied, you may need to:
     return await PrintBluetoothThermal.writeBytes(commands);
   }
 
-  /// Render sticker text layout as a landscape bitmap, rotate 90° clockwise,
-  /// then return ESC/POS raster commands.
-  ///
-  /// Sticker is ~50mm (short, feeds first) x ~95mm (long, across paper).
-  /// At 8 dots/mm: short side ≈ 400 dots, long side ≈ 576 dots (paper width).
-  ///
-  /// We render text in landscape (long x short), then rotate 90° CW so that:
-  ///   rotated width  = 400 dots  → fits within 576-dot paper width
-  ///   rotated height = 576+ dots → feeds out as the long dimension
+  // Sticker dimensions: 50mm x 100mm at 8 dots/mm
+  static const int _stickerShort = 400; // 50mm — feeds out first
+  static const int _stickerLong = 800; // 100mm — across paper
+
+  /// Paint [lines] onto a landscape canvas sized to the sticker,
+  /// center everything both horizontally and vertically, rotate 90° CW,
+  /// and return ESC/POS raster commands.
   Future<List<int>> _renderStickerAsRaster(List<_StickerLine> lines) async {
-    // Landscape canvas: long side across, short side down
-    // Sticker is 50mm x 100mm → 400 x 800 dots at 8 dots/mm
-    const int canvasW = 800; // sticker long side (100mm)
-    const int canvasH = 400; // sticker short side (50mm)
-    const double padding = 16;
+    const int w = _stickerLong;
+    const int h = _stickerShort;
 
-    // Paint text onto landscape canvas
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    // White background
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, canvasW.toDouble(), canvasH.toDouble()),
-      Paint()..color = const Color(0xFFFFFFFF),
-    );
-
-    // Measure total text block height
-    double totalTextHeight = 0;
+    // Pre-build paragraphs and measure actual heights
+    final paragraphs = <ui.Paragraph>[];
+    double totalH = 0;
     for (final line in lines) {
-      totalTextHeight += line.fontSize + 6;
-    }
-
-    // Center vertically with a downward nudge (+30) to sit better on the sticker
-    double y = ((canvasH - totalTextHeight) / 2) + 30;
-    if (y < padding) y = padding;
-
-    for (final line in lines) {
-      final textStyle = ui.TextStyle(
+      final style = ui.TextStyle(
         color: const Color(0xFF000000),
         fontSize: line.fontSize,
         fontWeight: line.bold ? FontWeight.bold : FontWeight.normal,
       );
-      final paragraphBuilder = ui.ParagraphBuilder(
-        ui.ParagraphStyle(textAlign: TextAlign.center),
-      )
-        ..pushStyle(textStyle)
+      final pb = ui.ParagraphBuilder(
+          ui.ParagraphStyle(textAlign: TextAlign.center))
+        ..pushStyle(style)
         ..addText(line.text);
-      final paragraph = paragraphBuilder.build();
-      paragraph.layout(ui.ParagraphConstraints(width: canvasW - padding * 2));
-      canvas.drawParagraph(paragraph, Offset(padding, y));
-      y += line.fontSize + 6;
+      final paragraph = pb.build();
+      paragraph.layout(ui.ParagraphConstraints(width: w.toDouble()));
+      paragraphs.add(paragraph);
+      totalH += paragraph.height;
     }
 
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+        Paint()..color = const Color(0xFFFFFFFF));
+
+    double y = (h - totalH) / 2;
+    if (y < 0) y = 0;
+
+    for (final paragraph in paragraphs) {
+      canvas.drawParagraph(paragraph, Offset(0, y));
+      y += paragraph.height;
+    }
+
+    return _finishAndRotate(recorder, w, h);
+  }
+
+  /// Paint text lines + QR code onto a single landscape sticker canvas,
+  /// so text is on the left half and QR on the right half when read
+  /// landscape. Rotate 90° CW for printing.
+  Future<List<int>> _renderPickupSlipAsRaster({
+    required List<_StickerLine> lines,
+    required String qrData,
+  }) async {
+    const int w = _stickerLong;
+    const int h = _stickerShort;
+    const int qrSize = 240;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+        Paint()..color = const Color(0xFFFFFFFF));
+
+    // Layout: text on the left ~60%, QR on the right ~40%
+    final double textAreaW = w * 0.58;
+    final double qrAreaX = textAreaW;
+
+    // --- Pre-build paragraphs and measure actual heights ---
+    final paragraphs = <ui.Paragraph>[];
+    double totalH = 0;
+    for (final line in lines) {
+      final style = ui.TextStyle(
+        color: const Color(0xFF000000),
+        fontSize: line.fontSize,
+        fontWeight: line.bold ? FontWeight.bold : FontWeight.normal,
+      );
+      final pb = ui.ParagraphBuilder(
+          ui.ParagraphStyle(textAlign: TextAlign.center))
+        ..pushStyle(style)
+        ..addText(line.text);
+      final paragraph = pb.build();
+      paragraph.layout(ui.ParagraphConstraints(width: textAreaW));
+      paragraphs.add(paragraph);
+      totalH += paragraph.height;
+    }
+
+    double y = (h - totalH) / 2;
+    if (y < 0) y = 0;
+
+    for (final paragraph in paragraphs) {
+      canvas.drawParagraph(paragraph, Offset(0, y));
+      y += paragraph.height;
+    }
+
+    // --- Draw QR code, centered in right area with nudge ---
+    // After 90° CW rotation: landscape-Y↑ → portrait-left, landscape-X↑ → portrait-down
+    final double qrX = qrAreaX + ((w - qrAreaX) - qrSize) / 2 - 60;
+    final double qrY = (h - qrSize) / 2 + 20;
+
+    final qrPainter = QrPainter(
+      data: qrData,
+      version: QrVersions.auto,
+      color: const Color(0xFF000000),
+      emptyColor: const Color(0xFFFFFFFF),
+      gapless: false,
+    );
+    canvas.save();
+    canvas.translate(qrX, qrY);
+    qrPainter.paint(canvas, Size(qrSize.toDouble(), qrSize.toDouble()));
+    canvas.restore();
+
+    return _finishAndRotate(recorder, w, h);
+  }
+
+  /// Shared: finish recording, rotate 90° CW, return raster commands.
+  Future<List<int>> _finishAndRotate(
+      ui.PictureRecorder recorder, int w, int h) async {
     final picture = recorder.endRecording();
-    final landscapeImg = await picture.toImage(canvasW, canvasH);
-    final byteData =
-        await landscapeImg.toByteData(format: ui.ImageByteFormat.png);
+    final image = await picture.toImage(w, h);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     final pngBytes = byteData!.buffer.asUint8List();
 
-    // Decode, rotate 90° clockwise, re-encode
     final decoded = img.decodeImage(pngBytes);
     if (decoded == null) throw Exception('Failed to decode sticker image');
     final rotated = img.copyRotate(decoded, 90);
 
-    print('🖨️ Sticker rendered ${canvasW}x$canvasH → rotated to ${rotated.width}x${rotated.height}');
+    print(
+        '🖨️ Sticker ${w}x$h → rotated ${rotated.width}x${rotated.height}');
 
     final rotatedPng = Uint8List.fromList(img.encodePng(rotated));
     return _imageToEscPosCommands(rotatedPng);
   }
 
-  /// Create raster commands for check-in sticker.
-  Future<List<int>> _createCheckInStickerCommands({
+  /// NAME TAG sticker — one per child.
+  /// Big name, age group, service info. Centered on 50x100mm sticker.
+  Future<List<int>> _createNameTagCommands({
     required String childName,
-    required String childId,
-    required String guardianId,
-    required String pickupCode,
-    required String serviceSession,
-    required DateTime checkinTime,
+    required String ageGroup,
+    required String serviceName,
+    required DateTime checkInTime,
   }) async {
     final lines = <_StickerLine>[
-      _StickerLine('KIDS CHURCH CHECK-IN', fontSize: 32, bold: true),
-      _StickerLine(childName, fontSize: 52, bold: true),
-      _StickerLine(pickupCode, fontSize: 48, bold: true),
-      _StickerLine('$serviceSession  ${_formatTime(checkinTime)}', fontSize: 24),
+      _StickerLine('KIDS CHURCH', fontSize: 24, bold: true),
+      _StickerLine(childName, fontSize: 80, bold: true),
+      _StickerLine(ageGroup, fontSize: 36, bold: true),
+      _StickerLine('$serviceName  ${_formatTime(checkInTime)}', fontSize: 20),
     ];
 
     final raster = await _renderStickerAsRaster(lines);
@@ -872,8 +953,9 @@ If permissions are still denied, you may need to:
     return [...raster, ...gen.cut()];
   }
 
-  /// Create raster commands for guardian check-in sticker.
-  Future<List<int>> _createGuardianCheckInStickerCommands({
+  /// PICKUP SLIP — one per check-in.
+  /// Text on left, QR code on right, all on one sticker.
+  Future<List<int>> _createPickupSlipCommands({
     required List<String> childIds,
     required List<String> children,
     required List<String> pickupCodes,
@@ -882,22 +964,45 @@ If permissions are still denied, you may need to:
     required DateTime checkInTime,
   }) async {
     final lines = <_StickerLine>[
-      _StickerLine('KIDS CHURCH PICKUP SLIP', fontSize: 32, bold: true),
+      _StickerLine('PICKUP SLIP', fontSize: 26, bold: true),
     ];
-
     for (int i = 0; i < children.length; i++) {
-      lines.add(_StickerLine(children[i], fontSize: 48, bold: true));
+      lines.add(_StickerLine(children[i], fontSize: 24, bold: true));
       if (i < pickupCodes.length) {
-        lines.add(_StickerLine('CODE: ${pickupCodes[i]}', fontSize: 28, bold: true));
+        lines.add(_StickerLine('CODE: ${pickupCodes[i]}', fontSize: 20));
       }
     }
+    lines.add(_StickerLine(
+        '$serviceName  ${_formatTime(checkInTime)}', fontSize: 18));
 
-    lines.add(_StickerLine('$serviceName  ${_formatTime(checkInTime)}', fontSize: 24));
+    final qrData = json.encode({
+      'guardianQrCode': guardianQrCode,
+      'pickupCodes': pickupCodes,
+      'childIds': childIds,
+    });
 
-    final raster = await _renderStickerAsRaster(lines);
+    final raster =
+        await _renderPickupSlipAsRaster(lines: lines, qrData: qrData);
     final profile = await CapabilityProfile.load();
     final gen = Generator(PaperSize.mm80, profile);
     return [...raster, ...gen.cut()];
+  }
+
+  /// Keep for backward compatibility with single-child check-in flow.
+  Future<List<int>> _createCheckInStickerCommands({
+    required String childName,
+    required String childId,
+    required String guardianId,
+    required String pickupCode,
+    required String serviceSession,
+    required DateTime checkinTime,
+  }) async {
+    return _createNameTagCommands(
+      childName: childName,
+      ageGroup: '',
+      serviceName: serviceSession,
+      checkInTime: checkinTime,
+    );
   }
 
   /// Format time for display
