@@ -36,16 +36,32 @@ class AppTheme {
   static const Color chipNeutralBg = Color(0xFFEDEFF3);
 
   // ── Age-group badges ──────────────────────────────────────────
+  // Backend slugs (Child.ageGroup enum) → display label.
   // Toddlers 0–3, Jr. Kids 4–6, Primary 7–9, Pre-Teens 10–12.
-  static const Map<String, AgeGroupBadge> _ageGroupBadges = {
-    'toddlers': AgeGroupBadge(Color(0xFFF7E7F0), Color(0xFF8E2E63)),
-    'jr. kids': AgeGroupBadge(Color(0xFFE6F5EA), Color(0xFF1F6E39)),
-    'primary': AgeGroupBadge(Color(0xFFE7EEFA), Color(0xFF0E3D8C)),
-    'pre-teens': AgeGroupBadge(Color(0xFFFBF2D8), Color(0xFF7A5C00)),
+  static const Map<String, String> _ageGroupLabels = {
+    'toddlers': 'Toddlers',
+    'preschool': 'Jr. Kids',
+    'elementary': 'Primary',
+    'preteens': 'Pre-Teens',
   };
 
+  static const Map<String, AgeGroupBadge> _ageGroupBadges = {
+    'toddlers': AgeGroupBadge(Color(0xFFF7E7F0), Color(0xFF8E2E63)),
+    'preschool': AgeGroupBadge(Color(0xFFE6F5EA), Color(0xFF1F6E39)),
+    'elementary': AgeGroupBadge(Color(0xFFE7EEFA), Color(0xFF0E3D8C)),
+    'preteens': AgeGroupBadge(Color(0xFFFBF2D8), Color(0xFF7A5C00)),
+  };
+
+  /// Maps a raw backend age-group slug (e.g. "preschool") to its display
+  /// label (e.g. "Jr. Kids"). Falls back to the raw value if unrecognized.
+  static String ageGroupLabel(String ageGroup) {
+    final key = ageGroup.trim().toLowerCase();
+    return _ageGroupLabels[key] ?? ageGroup;
+  }
+
   static AgeGroupBadge ageGroupBadge(String ageGroup) {
-    return _ageGroupBadges[ageGroup.trim().toLowerCase()] ??
+    final key = ageGroup.trim().toLowerCase();
+    return _ageGroupBadges[key] ??
         const AgeGroupBadge(chipNeutralBg, textTertiary);
   }
 

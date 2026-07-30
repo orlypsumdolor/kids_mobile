@@ -85,7 +85,8 @@ class ChildSelectionCard extends StatelessWidget {
                                   BorderRadius.circular(AppTheme.radiusPill),
                             ),
                             child: Text(
-                              child.ageGroup.toUpperCase(),
+                              AppTheme.ageGroupLabel(child.ageGroup)
+                                  .toUpperCase(),
                               style: TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,

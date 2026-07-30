@@ -264,9 +264,20 @@ class _CheckoutPageState extends State<CheckoutPage>
     return Stack(
       children: [
         const Positioned(
-          left: 20,
+          left: 36,
           bottom: 24,
-          child: HardwarePointer(label: 'Scanner', color: AppTheme.green),
+          child: HardwarePointer(
+              label: 'Scan Here',
+              color: AppTheme.green,
+              align: CrossAxisAlignment.start),
+        ),
+        Positioned(
+          top: 16,
+          right: 20,
+          child: CircleIconButton(
+            onTap: _openCameraScanner,
+            child: const Icon(Icons.camera_alt_outlined, size: 20),
+          ),
         ),
         Center(
           child: SingleChildScrollView(
@@ -349,12 +360,6 @@ class _CheckoutPageState extends State<CheckoutPage>
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 20),
-                OutlinedButton.icon(
-                  onPressed: _openCameraScanner,
-                  icon: const Icon(Icons.camera_alt, size: 18),
-                  label: const Text('Use camera instead'),
                 ),
                 const SizedBox(height: 16),
                 const Text(

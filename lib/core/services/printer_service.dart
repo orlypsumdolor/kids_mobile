@@ -813,6 +813,14 @@ If permissions are still denied, you may need to:
   static const int _stickerShort = 400; // 50mm — across paper
   static const int _stickerLong = 800; // 100mm — feeds out first
 
+  // The printer's full addressable line width (80mm @ 8 dots/mm). Our
+  // sticker is only 50mm (400 dots) wide, narrower than this — printed
+  // as-is, the printer's own justification decides where that leftover
+  // width goes, which isn't reliable across firmwares. Padding the raster
+  // out to the full line ourselves and centering our content within it
+  // guarantees it lands in the middle of the physical roll regardless.
+  static const int _printerLineWidth = 576;
+
   static const String _monoFont = 'IBM Plex Mono';
   static const String _uiFont = 'Poppins';
 
@@ -921,10 +929,22 @@ If permissions are still denied, you may need to:
     if (decoded == null) throw Exception('Failed to decode sticker image');
     final rotated = img.copyRotate(decoded, 90);
 
-    print(
-        '🖨️ Sticker ${w}x$h → rotated ${rotated.width}x${rotated.height}');
+    // Pad out to the printer's full line width so our content is
+    // centered on the physical roll instead of depending on the
+    // printer's own (inconsistent) justification handling for raster
+    // images.
+    img.Image padded = rotated;
+    if (rotated.width < _printerLineWidth) {
+      padded = img.Image(_printerLineWidth, rotated.height);
+      img.fill(padded, img.getColor(255, 255, 255));
+      final offsetX = (_printerLineWidth - rotated.width) ~/ 2;
+      img.copyInto(padded, rotated, dstX: offsetX, dstY: 0);
+    }
 
-    final rotatedPng = Uint8List.fromList(img.encodePng(rotated));
+    print(
+        '🖨️ Sticker ${w}x$h → rotated ${rotated.width}x${rotated.height} → padded ${padded.width}x${padded.height}');
+
+    final rotatedPng = Uint8List.fromList(img.encodePng(padded));
     return _imageToEscPosCommands(rotatedPng);
   }
 
@@ -942,7 +962,9 @@ If permissions are still denied, you may need to:
   }) async {
     const int w = _stickerLong; // 800
     const int h = _stickerShort; // 400
-    const double pad = 32;
+    const double pad = 32; // top/bottom margin
+    const double padLeft = 0; // no left margin
+    const double padRight = pad + 32; // extra breathing room on the right
     final hasNotes = specialNotes != null && specialNotes.trim().isNotEmpty;
 
     final recorder = ui.PictureRecorder();
@@ -957,9 +979,9 @@ If permissions are still denied, you may need to:
       fontSize: headerFontSize,
       fontWeight: FontWeight.w800,
       letterSpacing: 2.5,
-      maxWidth: w - pad * 2,
+      maxWidth: w - padLeft - padRight,
     );
-    canvas.drawParagraph(headerP, const Offset(pad, pad));
+    canvas.drawParagraph(headerP, const Offset(padLeft, pad));
 
     const pillFontSize = 20.0;
     const pillH = pillFontSize + 16;
@@ -969,7 +991,7 @@ If permissions are still denied, you may need to:
           fontSize: pillFontSize, fontWeight: FontWeight.w800);
       const pillPadH = 16.0;
       final pillW = textW + pillPadH * 2;
-      final pillX = w - pad - pillW;
+      final pillX = w - padRight - pillW;
       final pillRect = RRect.fromRectAndRadius(
           Rect.fromLTWH(pillX, pad - 6, pillW, pillH),
           const Radius.circular(pillH / 2));
@@ -997,7 +1019,7 @@ If permissions are still denied, you may need to:
         fontSize: footerFontSize,
         fontWeight: FontWeight.w600,
         fontFamily: _monoFont);
-    final footerLeftMaxW = w - pad * 2 - footerRightW - 16;
+    final footerLeftMaxW = w - padLeft - padRight - footerRightW - 16;
     final footerLeftP = _buildParagraph(
       serviceName,
       fontSize: footerFontSize,
@@ -1019,7 +1041,7 @@ If permissions are still denied, you may need to:
     final logoImage = await _loadLogoSilhouette();
     const logoH = 112.0;
     final logoW = logoH * (logoImage.width / logoImage.height);
-    final nameMaxWidth = w - pad * 2 - logoW - 20;
+    final nameMaxWidth = w - padLeft - padRight - logoW - 20;
     final nameP = _buildParagraph(
       _firstName(childName),
       fontSize: 96,
@@ -1043,7 +1065,7 @@ If permissions are still denied, you may need to:
       chipW = _textWidth('NOTES',
               fontSize: bandFontSize, fontWeight: FontWeight.w800) +
           chipPadH * 2;
-      final noteMaxW = w - pad * 2 - chipW - 14;
+      final noteMaxW = w - padLeft - padRight - chipW - 14;
       noteP = _buildParagraph(
         specialNotes.toUpperCase(),
         fontSize: bandFontSize,
@@ -1061,27 +1083,29 @@ If permissions are still denied, you may need to:
     if (middleY < middleTop) middleY = middleTop;
 
     canvas.drawParagraph(
-        nameP, Offset(pad, middleY + (nameRowH - nameP.height)));
+        nameP, Offset(padLeft, middleY + (nameRowH - nameP.height)));
     final srcRect = Rect.fromLTWH(
         0, 0, logoImage.width.toDouble(), logoImage.height.toDouble());
     final dstRect = Rect.fromLTWH(
-        w - pad - logoW, middleY + (nameRowH - logoH), logoW, logoH);
+        w - padRight - logoW, middleY + (nameRowH - logoH), logoW, logoH);
     canvas.drawImageRect(logoImage, srcRect, dstRect, Paint());
 
-    canvas.drawParagraph(footerLeftP, Offset(pad, footerY));
+    canvas.drawParagraph(footerLeftP, Offset(padLeft, footerY));
     canvas.drawParagraph(
-        footerRightP, Offset(w - pad - footerRightW, footerY));
+        footerRightP, Offset(w - padRight - footerRightW, footerY));
 
     // --- Divider directly above the footer: 1px normally, or the notes
     // band's own 2px border when there are notes (never both). ---
     if (hasNotes && noteP != null) {
       final bandY = middleY + nameRowH + nameToBandGap;
-      canvas.drawLine(Offset(pad, dividerY), Offset(w - pad, dividerY),
+      canvas.drawLine(
+          Offset(padLeft, dividerY), Offset(w - padRight, dividerY),
           Paint()
             ..color = const Color(0xFF000000)
             ..strokeWidth = 2);
       canvas.drawRect(
-          Rect.fromLTWH(pad, bandY + (bandRowH - chipH) / 2, chipW, chipH),
+          Rect.fromLTWH(
+              padLeft, bandY + (bandRowH - chipH) / 2, chipW, chipH),
           Paint()..color = const Color(0xFF000000));
       final chipTextP = _buildParagraph(
         'NOTES',
@@ -1091,15 +1115,19 @@ If permissions are still denied, you may need to:
         align: TextAlign.center,
         maxWidth: chipW,
       );
-      canvas.drawParagraph(
-          chipTextP, Offset(pad, bandY + (bandRowH - chipH) / 2 + chipPadV));
+      canvas.drawParagraph(chipTextP,
+          Offset(padLeft, bandY + (bandRowH - chipH) / 2 + chipPadV));
       canvas.drawParagraph(noteP,
-          Offset(pad + chipW + 14, bandY + (bandRowH - noteP.height) / 2));
+          Offset(padLeft + chipW + 14, bandY + (bandRowH - noteP.height) / 2));
     } else {
-      canvas.drawLine(Offset(pad, dividerY), Offset(w - pad, dividerY),
+      // 2px, not 1px: a hairline can anti-alias to gray and wash out
+      // under the printer's monochrome threshold (same issue the notes
+      // band's border avoids by already being 2px).
+      canvas.drawLine(
+          Offset(padLeft, dividerY), Offset(w - padRight, dividerY),
           Paint()
             ..color = const Color(0xFF000000)
-            ..strokeWidth = 1);
+            ..strokeWidth = 2);
     }
 
     final raster = await _finishAndRotate(recorder, w, h);
@@ -1126,10 +1154,11 @@ If permissions are still denied, you may need to:
   }) async {
     const int w = _stickerLong; // 800
     const int h = _stickerShort; // 400
-    const double leftPad = 24;
+    const double leftPad = 0; // no left margin, matching the name tag
+    const double fontScale = 1.5;
     const double textAreaW = w * 0.58;
     const double contentW = textAreaW - leftPad - 14;
-    const double qrSize = 190;
+    const double qrSize = 260;
 
     // Each block is a ui.Paragraph (single line), a _ChildRowParagraph (a
     // name/value pair drawn left+right on one line), or a _Divider (a
@@ -1151,7 +1180,7 @@ If permissions are still denied, you may need to:
 
     addBlock(
       _buildParagraph('PICKUP SLIP',
-          fontSize: 20,
+          fontSize: 20 * fontScale,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.5,
           align: TextAlign.center,
@@ -1160,7 +1189,7 @@ If permissions are still denied, you may need to:
     );
     addBlock(
       _buildParagraph('Victory · General Santos',
-          fontSize: 13,
+          fontSize: 13 * fontScale,
           fontWeight: FontWeight.w700,
           align: TextAlign.center,
           maxWidth: contentW),
@@ -1168,13 +1197,13 @@ If permissions are still denied, you may need to:
     );
     addBlock(
       _buildParagraph(serviceName,
-          fontSize: 11.5, align: TextAlign.center, maxWidth: contentW),
+          fontSize: 11.5 * fontScale, align: TextAlign.center, maxWidth: contentW),
       gapAfter: 1,
     );
     final dateStr = DateFormat('EEE, MMM d yyyy').format(checkInTime.toLocal());
     addBlock(
       _buildParagraph('$dateStr · in ${_formatTime(checkInTime)}',
-          fontSize: 11.5, align: TextAlign.center, maxWidth: contentW),
+          fontSize: 11.5 * fontScale, align: TextAlign.center, maxWidth: contentW),
       gapAfter: 8,
     );
 
@@ -1189,18 +1218,23 @@ If permissions are still denied, you may need to:
       final hasNote = note != null && note.trim().isNotEmpty;
 
       final codeW = _textWidth(code,
-          fontSize: 14, fontWeight: FontWeight.w600, fontFamily: _monoFont);
+          fontSize: 14 * fontScale,
+          fontWeight: FontWeight.w600,
+          fontFamily: _monoFont);
       final nameMaxW = contentW - codeW - 10;
       final nameP = _buildParagraph(children[i],
-          fontSize: 14, fontWeight: FontWeight.w700, maxWidth: nameMaxW);
+          fontSize: 14 * fontScale,
+          fontWeight: FontWeight.w700,
+          maxWidth: nameMaxW);
       final codeP = _buildParagraph(code,
-          fontSize: 14,
+          fontSize: 14 * fontScale,
           fontWeight: FontWeight.w600,
           fontFamily: _monoFont,
           align: TextAlign.right,
           maxWidth: codeW + 2);
       final subtext = hasNote ? '$ageGroup · notes' : ageGroup;
-      final subP = _buildParagraph(subtext, fontSize: 10.5, maxWidth: contentW);
+      final subP = _buildParagraph(subtext,
+          fontSize: 10.5 * fontScale, maxWidth: contentW);
 
       addBlock(_ChildRowParagraph(nameP, codeP), gapAfter: 1);
       addBlock(subP, gapAfter: 6);
@@ -1208,10 +1242,10 @@ If permissions are still denied, you may need to:
 
     addBlock(const _Divider(), gapAfter: 8);
 
-    final guardianLabelP =
-        _buildParagraph('Guardian', fontSize: 12, maxWidth: contentW * 0.4);
+    final guardianLabelP = _buildParagraph('Guardian',
+        fontSize: 12 * fontScale, maxWidth: contentW * 0.4);
     final guardianNameP = _buildParagraph(guardianName,
-        fontSize: 12,
+        fontSize: 12 * fontScale,
         fontWeight: FontWeight.w700,
         align: TextAlign.right,
         maxWidth: contentW * 0.6);
@@ -1219,7 +1253,10 @@ If permissions are still denied, you may need to:
 
     addBlock(
       _buildParagraph('Keep this slip · required for pickup',
-          fontSize: 10.5, align: TextAlign.center, maxWidth: contentW),
+          fontSize: 12.5 * fontScale,
+          fontWeight: FontWeight.w700,
+          align: TextAlign.center,
+          maxWidth: contentW),
       gapAfter: 0,
     );
 
@@ -1239,10 +1276,12 @@ If permissions are still denied, you may need to:
     for (var i = 0; i < blocks.length; i++) {
       final block = blocks[i];
       if (block is _Divider) {
+        // 2px, not 1px: a hairline can anti-alias to gray and wash out
+        // under the printer's monochrome threshold.
         canvas.drawLine(Offset(leftPad, y), Offset(leftPad + contentW, y),
             Paint()
               ..color = const Color(0xFF000000)
-              ..strokeWidth = 1);
+              ..strokeWidth = 2);
       } else if (block is _ChildRowParagraph) {
         canvas.drawParagraph(block.left, Offset(leftPad, y));
         canvas.drawParagraph(
@@ -1266,7 +1305,8 @@ If permissions are still denied, you may need to:
       emptyColor: const Color(0xFFFFFFFF),
       gapless: false,
     );
-    final qrX = textAreaW + ((w - textAreaW) - qrSize) / 2;
+    const double qrRightPad = 64; // matches the name tag's right padding
+    final qrX = w - qrRightPad - qrSize;
     final qrY = (h - qrSize) / 2;
     canvas.save();
     canvas.translate(qrX, qrY);
@@ -1386,11 +1426,9 @@ If permissions are still denied, you may need to:
       // M90 / REGO RG-KL532A-H uses 80mm paper (576 dots/line, 72mm effective)
       final generator = Generator(PaperSize.mm80, profile);
 
-      // Convert image to ESC/POS raster commands. Our bitmap is already
-      // narrower than the printer's full 576-dot line (by design — the
-      // sticker/slip canvas owns its own margins), so force left alignment
-      // here; otherwise imageRaster's default PosAlign.center adds the
-      // printer's own extra offset on top of ours.
+      // The bitmap is already padded out to the printer's full line width
+      // (see _finishAndRotate), with our content centered within it, so
+      // alignment here is a no-op — left keeps it deterministic either way.
       final List<int> rasterCommands =
           generator.imageRaster(decoded, align: PosAlign.left);
 

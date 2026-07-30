@@ -41,7 +41,7 @@ class AppShellHeader extends StatelessWidget {
         child: Row(
           children: [
             if (showBackButton) ...[
-              _CircleIconButton(
+              CircleIconButton(
                 onTap: onBack ?? () => Navigator.of(context).maybePop(),
                 child: const Icon(Icons.arrow_back, size: 20),
               ),
@@ -81,7 +81,7 @@ class AppShellHeader extends StatelessWidget {
             const SizedBox(width: 8),
             _PrinterPill(connected: printerConnected),
             const SizedBox(width: 8),
-            _CircleIconButton(
+            CircleIconButton(
               onTap: onSettings,
               child: const Icon(Icons.settings_outlined, size: 20),
             ),
@@ -135,11 +135,12 @@ class _PrinterPill extends StatelessWidget {
   }
 }
 
-class _CircleIconButton extends StatelessWidget {
+class CircleIconButton extends StatelessWidget {
   final VoidCallback onTap;
   final Widget child;
 
-  const _CircleIconButton({required this.onTap, required this.child});
+  const CircleIconButton(
+      {super.key, required this.onTap, required this.child});
 
   @override
   Widget build(BuildContext context) {

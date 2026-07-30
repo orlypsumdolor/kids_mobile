@@ -102,8 +102,14 @@ class _ScanPulseState extends State<ScanPulse>
 class HardwarePointer extends StatefulWidget {
   final String label;
   final Color color;
+  final CrossAxisAlignment align;
 
-  const HardwarePointer({super.key, required this.label, required this.color});
+  const HardwarePointer({
+    super.key,
+    required this.label,
+    required this.color,
+    this.align = CrossAxisAlignment.center,
+  });
 
   @override
   State<HardwarePointer> createState() => _HardwarePointerState();
@@ -155,6 +161,7 @@ class _HardwarePointerState extends State<HardwarePointer>
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: widget.align,
         children: [
           Text(
             widget.label,
@@ -165,28 +172,39 @@ class _HardwarePointerState extends State<HardwarePointer>
             ),
           ),
           SizedBox(height: labelGap),
-          Container(
-            width: stemW,
-            height: stemH,
-            decoration: BoxDecoration(
-              color: widget.color,
-              borderRadius: BorderRadius.circular(stemW),
-            ),
-          ),
-          Transform.rotate(
-            angle:
-                0.785398, // 45deg: turns a right+bottom border into a chevron
-            child: Container(
-              width: chevronSize,
-              height: chevronSize,
-              decoration: BoxDecoration(
-                border: Border(
-                  right: BorderSide(color: widget.color, width: chevronBorder),
-                  bottom:
-                      BorderSide(color: widget.color, width: chevronBorder),
+          // Stem + chevron always stay centered on each other (the stem
+          // must line up with the chevron's tip, not its bounding box
+          // edge) — only this whole arrow shape, as a unit, follows
+          // widget.align relative to the label above it.
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: stemW,
+                height: stemH,
+                decoration: BoxDecoration(
+                  color: widget.color,
+                  borderRadius: BorderRadius.circular(stemW),
                 ),
               ),
-            ),
+              Transform.rotate(
+                angle:
+                    0.785398, // 45deg: turns a right+bottom border into a chevron
+                child: Container(
+                  width: chevronSize,
+                  height: chevronSize,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      right: BorderSide(
+                          color: widget.color, width: chevronBorder),
+                      bottom: BorderSide(
+                          color: widget.color, width: chevronBorder),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -367,7 +367,9 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
       final matchedChildren =
           records.map((record) => _matchChild(record.childId)).toList();
       final childrenNames = matchedChildren.map((c) => c.fullName).toList();
-      final ageGroups = matchedChildren.map((c) => c.ageGroup).toList();
+      final ageGroups = matchedChildren
+          .map((c) => AppTheme.ageGroupLabel(c.ageGroup))
+          .toList();
       final specialNotes = matchedChildren.map((c) => c.combinedNotes).toList();
       final pickupCodes = records.map((record) => record.pickupCode).toList();
       final childIds = records.map((record) => record.childId).toList();
@@ -580,9 +582,22 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
     return Stack(
       children: [
         const Positioned(
-          left: 20,
+          left: 36,
           bottom: 24,
-          child: HardwarePointer(label: 'Scanner', color: AppTheme.magenta),
+          child: HardwarePointer(
+              label: 'Scan Here',
+              color: AppTheme.magenta,
+              align: CrossAxisAlignment.start),
+        ),
+        Positioned(
+          top: 16,
+          right: 20,
+          child: CircleIconButton(
+            onTap: () {
+              if (!_isScanning) _scanGuardianQR();
+            },
+            child: const Icon(Icons.camera_alt_outlined, size: 20),
+          ),
         ),
         Center(
           child: SingleChildScrollView(
@@ -668,12 +683,6 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
-                OutlinedButton.icon(
-                  onPressed: _isScanning ? null : _scanGuardianQR,
-                  icon: const Icon(Icons.camera_alt, size: 18),
-                  label: const Text('Use camera instead'),
-                ),
                 if (_error != null) ...[
                   const SizedBox(height: 20),
                   InlineErrorBanner(message: _error!, onDismiss: _clearError),
@@ -713,9 +722,12 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
           ),
         ),
         const Positioned(
-          right: 20,
+          right: 36,
           bottom: 24,
-          child: HardwarePointer(label: 'Printer', color: AppTheme.navy),
+          child: HardwarePointer(
+              label: 'Printing Here',
+              color: AppTheme.navy,
+              align: CrossAxisAlignment.end),
         ),
       ],
     );
@@ -842,10 +854,12 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
             ],
           ),
           const Positioned(
-            right: 20,
+            right: 36,
             bottom: 96,
             child: HardwarePointer(
-                label: 'Tags + slip here', color: AppTheme.navy),
+                label: 'Get Tags + Slip Here',
+                color: AppTheme.navy,
+                align: CrossAxisAlignment.end),
           ),
         ],
       ),

@@ -88,8 +88,8 @@ class ChildModel {
       final childModel = ChildModel(
         id: json['_id'] ?? json['id'] ?? '',
         fullName: json['fullName'] ?? '',
-        dateOfBirth: json['dateOfBirth'] != null
-            ? DateTime.parse(json['dateOfBirth'])
+        dateOfBirth: (json['dob'] ?? json['dateOfBirth']) != null
+            ? DateTime.parse(json['dob'] ?? json['dateOfBirth'])
             : DateTime.now(),
         gender: json['gender'] ?? '',
         ageGroup: json['ageGroup'] ?? '',
