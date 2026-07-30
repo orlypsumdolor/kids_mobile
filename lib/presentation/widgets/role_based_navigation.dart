@@ -3,9 +3,56 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../../core/router/app_router.dart';
+import '../../core/theme/app_theme.dart';
 
-class RoleBasedNavigation extends StatelessWidget {
-  const RoleBasedNavigation({super.key});
+/// Home screen's primary tile row: Check In / Check Out, role-gated on
+/// [User.canScan]. Sits near the top of Home, right below the "Now serving"
+/// card, per the design.
+class PrimaryActionTiles extends StatelessWidget {
+  const PrimaryActionTiles({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        final user = authProvider.currentUser;
+        if (user == null || !user.canScan) return const SizedBox.shrink();
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _PrimaryTile(
+                label: 'Check In',
+                subtitle: 'Scan guardian badge',
+                chipColor: const Color(0xFF7FA8E8),
+                filled: true,
+                onTap: () => context.push(AppRouter.guardianCheckin),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _PrimaryTile(
+                label: 'Check Out',
+                subtitle: 'Scan pickup slip',
+                chipColor: AppTheme.green,
+                filled: false,
+                onTap: () => context.push(AppRouter.checkout),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Home screen's secondary tile row: Attendance ([User.canViewReports]) and
+/// Settings ([User.canManageUsers]). Per the design this is anchored to the
+/// bottom of the screen together with the user/logout row, not stacked
+/// directly under the primary tiles.
+class SecondaryActionTiles extends StatelessWidget {
+  const SecondaryActionTiles({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -14,91 +61,35 @@ class RoleBasedNavigation extends StatelessWidget {
         final user = authProvider.currentUser;
         if (user == null) return const SizedBox.shrink();
 
-        return Column(
+        final tiles = <Widget>[
+          if (user.canViewReports)
+            Expanded(
+              child: _SecondaryTile(
+                label: 'Attendance',
+                subtitle: "Today's numbers",
+                chipColor: AppTheme.yellow,
+                onTap: () => context.push(AppRouter.attendanceSummary),
+              ),
+            ),
+          if (user.canManageUsers)
+            Expanded(
+              child: _SecondaryTile(
+                label: 'Settings',
+                subtitle: 'Printer + station',
+                chipColor: AppTheme.blue,
+                onTap: () => context.push(AppRouter.settings),
+              ),
+            ),
+        ];
+
+        if (tiles.isEmpty) return const SizedBox.shrink();
+
+        return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Quick Actions',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 16),
-
-            // Scanner/Volunteer Actions
-            if (user.canScan) ...[
-              Text(
-                'Check-In & Check-Out',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey[700],
-                    ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _ActionCard(
-                      title: 'Guardian Check-In',
-                      subtitle:
-                          'Scan guardian QR/RFID to check in multiple children',
-                      icon: Icons.family_restroom,
-                      color: Colors.green[600]!,
-                      onTap: () => context.push(AppRouter.guardianCheckin),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _ActionCard(
-                      title: 'Check Out',
-                      subtitle: 'Verify pickup code',
-                      icon: Icons.logout,
-                      color: Theme.of(context).colorScheme.secondary,
-                      onTap: () => context.push(AppRouter.checkout),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-            ],
-
-            // Admin/Staff Actions
-            if (user.canViewReports) ...[
-              Text(
-                'Reports & Analytics',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey[700],
-                    ),
-              ),
-              const SizedBox(height: 12),
-              _ActionCard(
-                title: 'Attendance Summary',
-                subtitle: 'View today\'s attendance',
-                icon: Icons.analytics,
-                color: Theme.of(context).colorScheme.tertiary,
-                onTap: () => context.push(AppRouter.attendanceSummary),
-                isFullWidth: true,
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // Admin Only Actions
-            if (user.canManageUsers) ...[
-              Text(
-                'Administration',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey[700],
-                    ),
-              ),
-              const SizedBox(height: 12),
-              _ActionCard(
-                title: 'Settings',
-                subtitle: 'Manage app settings',
-                icon: Icons.settings,
-                color: Colors.grey[600]!,
-                onTap: () => context.push(AppRouter.settings),
-                isFullWidth: true,
-              ),
+            for (var i = 0; i < tiles.length; i++) ...[
+              if (i > 0) const SizedBox(width: 12),
+              tiles[i],
             ],
           ],
         );
@@ -107,117 +98,153 @@ class RoleBasedNavigation extends StatelessWidget {
   }
 }
 
-class _ActionCard extends StatelessWidget {
-  final String title;
+class _PrimaryTile extends StatelessWidget {
+  final String label;
   final String subtitle;
-  final IconData icon;
-  final Color color;
+  final Color chipColor;
+  final bool filled;
   final VoidCallback onTap;
-  final bool isFullWidth;
 
-  const _ActionCard({
-    required this.title,
+  const _PrimaryTile({
+    required this.label,
     required this.subtitle,
-    required this.icon,
-    required this.color,
+    required this.chipColor,
+    required this.filled,
     required this.onTap,
-    this.isFullWidth = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      shadowColor: color.withOpacity(0.3),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+    final bg = filled ? AppTheme.navy : AppTheme.surface;
+    final fg = filled ? Colors.white : AppTheme.textPrimary;
+    final border = filled ? AppTheme.navy : AppTheme.hairline;
+
+    return AspectRatio(
+      aspectRatio: 1,
+      child: Material(
+        color: bg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusTile),
+              border: Border.all(color: border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: chipColor,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                    color: fg,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: fg.withValues(alpha: 0.75),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
+    );
+  }
+}
+
+class _SecondaryTile extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  final Color chipColor;
+  final VoidCallback onTap;
+
+  const _SecondaryTile({
+    required this.label,
+    required this.subtitle,
+    required this.chipColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.surface,
+      borderRadius: BorderRadius.circular(AppTheme.radiusCard),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: isFullWidth
-              ? Row(
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 76),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+            border: Border.all(color: AppTheme.hairline),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: chipColor,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: color.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: color.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Icon(icon, color: color, size: 28),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                          Text(
-                            subtitle,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Colors.grey[600],
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.arrow_forward_ios,
-                        size: 16, color: Colors.grey[400]),
-                  ],
-                )
-              : Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: color.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: color.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Icon(icon, color: color, size: 36),
-                    ),
-                    const SizedBox(height: 16),
                     Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: color,
-                          ),
-                      textAlign: TextAlign.center,
+                      label,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.1,
+                        color: AppTheme.textPrimary,
+                      ),
                     ),
-                    const SizedBox(height: 8),
                     Text(
                       subtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey[600],
-                            height: 1.3,
-                          ),
-                      textAlign: TextAlign.center,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
                   ],
                 ),
+              ),
+            ],
+          ),
         ),
       ),
     );

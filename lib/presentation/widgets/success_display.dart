@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
+
 /// Reusable success message display widget
 class SuccessDisplay extends StatelessWidget {
   final String message;
@@ -21,19 +23,19 @@ class SuccessDisplay extends StatelessWidget {
       margin: const EdgeInsets.all(16.0),
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        borderRadius: BorderRadius.circular(8.0),
+        color: AppTheme.successBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
         border: Border.all(
-          color: Colors.green.shade200,
+          color: AppTheme.successBorder,
           width: 1.0,
         ),
       ),
       child: Row(
         children: [
           if (showIcon) ...[
-            Icon(
+            const Icon(
               Icons.check_circle_outline,
-              color: Colors.green.shade600,
+              color: AppTheme.green,
               size: 20.0,
             ),
             const SizedBox(width: 8.0),
@@ -41,8 +43,8 @@ class SuccessDisplay extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: TextStyle(
-                color: Colors.green.shade800,
+              style: const TextStyle(
+                color: AppTheme.successText,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -51,7 +53,7 @@ class SuccessDisplay extends StatelessWidget {
             IconButton(
               onPressed: onDismiss,
               icon: const Icon(Icons.close, size: 20.0),
-              color: Colors.green.shade600,
+              color: AppTheme.green,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(
                 minWidth: 32.0,
@@ -185,12 +187,12 @@ class SuccessSnackBar {
             ),
           ],
         ),
-        backgroundColor: Colors.green.shade600,
+        backgroundColor: AppTheme.green,
         duration: duration,
         action: action,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
+          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
         ),
       ),
     );

@@ -16,6 +16,7 @@ import '../../domain/entities/checkin_session.dart';
 import 'package:esc_pos_utils/esc_pos_utils.dart';
 import 'package:image/image.dart' as img;
 import '../models/connected_printer_info.dart';
+import 'package:intl/intl.dart';
 
 enum PrinterConnectionType { bluetooth, usb }
 
@@ -737,8 +738,10 @@ If permissions are still denied, you may need to:
     required List<String> pickupCodes,
     required List<String> ageGroups,
     required String guardianQrCode,
+    required String guardianName,
     required String serviceName,
     required DateTime checkInTime,
+    List<String?>? specialNotes,
   }) async {
     if (!_isConnected) {
       throw Exception('Printer not connected');
@@ -753,6 +756,9 @@ If permissions are still denied, you may need to:
           ageGroup: i < ageGroups.length ? ageGroups[i] : '',
           serviceName: serviceName,
           checkInTime: checkInTime,
+          pickupCode: i < pickupCodes.length ? pickupCodes[i] : '',
+          specialNotes:
+              specialNotes != null && i < specialNotes.length ? specialNotes[i] : null,
         );
         final tagResult = await _sendBytes(nameTagCommands);
         if (!tagResult) {
@@ -768,7 +774,10 @@ If permissions are still denied, you may need to:
         childIds: childIds,
         children: children,
         pickupCodes: pickupCodes,
+        ageGroups: ageGroups,
+        specialNotes: specialNotes,
         guardianQrCode: guardianQrCode,
+        guardianName: guardianName,
         serviceName: serviceName,
         checkInTime: checkInTime,
       );
@@ -800,117 +809,104 @@ If permissions are still denied, you may need to:
     return await PrintBluetoothThermal.writeBytes(commands);
   }
 
-  // Sticker dimensions: 50mm x 100mm at 8 dots/mm
-  static const int _stickerShort = 400; // 50mm — feeds out first
-  static const int _stickerLong = 800; // 100mm — across paper
+  // Sticker dimensions: 100mm x 50mm landscape at 8 dots/mm
+  static const int _stickerShort = 400; // 50mm — across paper
+  static const int _stickerLong = 800; // 100mm — feeds out first
 
-  /// Paint [lines] onto a landscape canvas sized to the sticker,
-  /// center everything both horizontally and vertically, rotate 90° CW,
-  /// and return ESC/POS raster commands.
-  Future<List<int>> _renderStickerAsRaster(List<_StickerLine> lines) async {
-    const int w = _stickerLong;
-    const int h = _stickerShort;
+  static const String _monoFont = 'IBM Plex Mono';
+  static const String _uiFont = 'Poppins';
 
-    // Pre-build paragraphs and measure actual heights
-    final paragraphs = <ui.Paragraph>[];
-    double totalH = 0;
-    for (final line in lines) {
-      final style = ui.TextStyle(
-        color: const Color(0xFF000000),
-        fontSize: line.fontSize,
-        fontWeight: line.bold ? FontWeight.bold : FontWeight.normal,
-      );
-      final pb = ui.ParagraphBuilder(
-          ui.ParagraphStyle(textAlign: TextAlign.center))
-        ..pushStyle(style)
-        ..addText(line.text);
-      final paragraph = pb.build();
-      paragraph.layout(ui.ParagraphConstraints(width: w.toDouble()));
-      paragraphs.add(paragraph);
-      totalH += paragraph.height;
-    }
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    canvas.drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
-        Paint()..color = const Color(0xFFFFFFFF));
-
-    double y = (h - totalH) / 2;
-    if (y < 0) y = 0;
-
-    for (final paragraph in paragraphs) {
-      canvas.drawParagraph(paragraph, Offset(0, y));
-      y += paragraph.height;
-    }
-
-    return _finishAndRotate(recorder, w, h);
+  /// Build a laid-out paragraph constrained to [maxWidth]. Defaults to the
+  /// app's Poppins font — pass fontFamily: _monoFont for codes/times.
+  ui.Paragraph _buildParagraph(
+    String text, {
+    required double fontSize,
+    FontWeight fontWeight = FontWeight.normal,
+    Color color = const Color(0xFF000000),
+    TextAlign align = TextAlign.left,
+    String? fontFamily,
+    double letterSpacing = 0,
+    required double maxWidth,
+  }) {
+    final style = ui.TextStyle(
+      color: color,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      fontFamily: fontFamily ?? _uiFont,
+      letterSpacing: letterSpacing,
+    );
+    final pb = ui.ParagraphBuilder(ui.ParagraphStyle(textAlign: align))
+      ..pushStyle(style)
+      ..addText(text);
+    final paragraph = pb.build();
+    paragraph.layout(ui.ParagraphConstraints(width: maxWidth));
+    return paragraph;
   }
 
-  /// Paint text lines + QR code onto a single landscape sticker canvas,
-  /// so text is on the left half and QR on the right half when read
-  /// landscape. Rotate 90° CW for printing.
-  Future<List<int>> _renderPickupSlipAsRaster({
-    required List<_StickerLine> lines,
-    required String qrData,
-  }) async {
-    const int w = _stickerLong;
-    const int h = _stickerShort;
-    const int qrSize = 240;
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    canvas.drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
-        Paint()..color = const Color(0xFFFFFFFF));
-
-    // Layout: text on the left ~60%, QR on the right ~40%
-    final double textAreaW = w * 0.58;
-    final double qrAreaX = textAreaW;
-
-    // --- Pre-build paragraphs and measure actual heights ---
-    final paragraphs = <ui.Paragraph>[];
-    double totalH = 0;
-    for (final line in lines) {
-      final style = ui.TextStyle(
-        color: const Color(0xFF000000),
-        fontSize: line.fontSize,
-        fontWeight: line.bold ? FontWeight.bold : FontWeight.normal,
-      );
-      final pb = ui.ParagraphBuilder(
-          ui.ParagraphStyle(textAlign: TextAlign.center))
-        ..pushStyle(style)
-        ..addText(line.text);
-      final paragraph = pb.build();
-      paragraph.layout(ui.ParagraphConstraints(width: textAreaW));
-      paragraphs.add(paragraph);
-      totalH += paragraph.height;
-    }
-
-    double y = (h - totalH) / 2;
-    if (y < 0) y = 0;
-
-    for (final paragraph in paragraphs) {
-      canvas.drawParagraph(paragraph, Offset(0, y));
-      y += paragraph.height;
-    }
-
-    // --- Draw QR code, centered in right area with nudge ---
-    // After 90° CW rotation: landscape-Y↑ → portrait-left, landscape-X↑ → portrait-down
-    final double qrX = qrAreaX + ((w - qrAreaX) - qrSize) / 2 - 60;
-    final double qrY = (h - qrSize) / 2 + 20;
-
-    final qrPainter = QrPainter(
-      data: qrData,
-      version: QrVersions.auto,
-      color: const Color(0xFF000000),
-      emptyColor: const Color(0xFFFFFFFF),
-      gapless: false,
+  /// Natural (unwrapped) width of [text] at the given style.
+  double _textWidth(
+    String text, {
+    required double fontSize,
+    FontWeight fontWeight = FontWeight.normal,
+    String? fontFamily,
+    double letterSpacing = 0,
+  }) {
+    final p = _buildParagraph(
+      text,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      fontFamily: fontFamily,
+      letterSpacing: letterSpacing,
+      maxWidth: 5000,
     );
-    canvas.save();
-    canvas.translate(qrX, qrY);
-    qrPainter.paint(canvas, Size(qrSize.toDouble(), qrSize.toDouble()));
-    canvas.restore();
+    return p.maxIntrinsicWidth;
+  }
 
-    return _finishAndRotate(recorder, w, h);
+  ui.Image? _logoSilhouetteCache;
+
+  /// Load the Kids Church logo as a solid-black silhouette (white letter
+  /// cutouts preserved, transparent stays transparent). The source asset is
+  /// a full-color tile design (magenta/navy/green/yellow) — a monochrome
+  /// thermal head prints black/white by pixel *luminance*, so the yellow and
+  /// green tiles (high luminance) wash out to nothing while the darker
+  /// magenta/navy tiles survive, printing only half the mark. Forcing every
+  /// non-white, non-transparent pixel to solid black sidesteps that
+  /// entirely. Cached after first conversion (only used for printing — the
+  /// on-screen UI still uses the full-color asset directly).
+  Future<ui.Image> _loadLogoSilhouette() async {
+    final cached = _logoSilhouetteCache;
+    if (cached != null) return cached;
+
+    final data = await rootBundle.load('assets/images/kids_church_logo.png');
+    final decoded = img.decodePng(data.buffer.asUint8List());
+    if (decoded == null) throw Exception('Failed to decode logo asset');
+
+    final silhouette = img.Image(decoded.width, decoded.height);
+    for (int y = 0; y < decoded.height; y++) {
+      for (int x = 0; x < decoded.width; x++) {
+        final pixel = decoded.getPixel(x, y);
+        final a = img.getAlpha(pixel);
+        if (a < 16) {
+          silhouette.setPixelRgba(x, y, 255, 255, 255, 0);
+          continue;
+        }
+        final r = img.getRed(pixel);
+        final g = img.getGreen(pixel);
+        final b = img.getBlue(pixel);
+        final isNearWhite = r > 200 && g > 200 && b > 200;
+        if (isNearWhite) {
+          silhouette.setPixelRgba(x, y, 255, 255, 255, 255);
+        } else {
+          silhouette.setPixelRgba(x, y, 0, 0, 0, 255);
+        }
+      }
+    }
+
+    final pngBytes = Uint8List.fromList(img.encodePng(silhouette));
+    final codec = await ui.instantiateImageCodec(pngBytes);
+    final frame = await codec.getNextFrame();
+    _logoSilhouetteCache = frame.image;
+    return frame.image;
   }
 
   /// Shared: finish recording, rotate 90° CW, return raster commands.
@@ -932,57 +928,352 @@ If permissions are still denied, you may need to:
     return _imageToEscPosCommands(rotatedPng);
   }
 
-  /// NAME TAG sticker — one per child.
-  /// Big name, age group, service info. Centered on 50x100mm sticker.
+  /// NAME TAG sticker — one per child. 100 x 50mm landscape:
+  /// header (KIDS CHURCH + age-group pill), name + logo, an optional
+  /// notes band (medical/special notes combined), and a footer
+  /// (service · pickup code + time).
   Future<List<int>> _createNameTagCommands({
     required String childName,
     required String ageGroup,
     required String serviceName,
     required DateTime checkInTime,
+    required String pickupCode,
+    String? specialNotes,
   }) async {
-    final lines = <_StickerLine>[
-      _StickerLine('KIDS CHURCH', fontSize: 24, bold: true),
-      _StickerLine(childName, fontSize: 80, bold: true),
-      _StickerLine(ageGroup, fontSize: 36, bold: true),
-      _StickerLine('$serviceName  ${_formatTime(checkInTime)}', fontSize: 20),
-    ];
+    const int w = _stickerLong; // 800
+    const int h = _stickerShort; // 400
+    const double pad = 32;
+    final hasNotes = specialNotes != null && specialNotes.trim().isNotEmpty;
 
-    final raster = await _renderStickerAsRaster(lines);
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+        Paint()..color = const Color(0xFFFFFFFF));
+
+    // --- Header row: KIDS CHURCH (left) + age-group pill (right) ---
+    const headerFontSize = 22.0;
+    final headerP = _buildParagraph(
+      'KIDS CHURCH',
+      fontSize: headerFontSize,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 2.5,
+      maxWidth: w - pad * 2,
+    );
+    canvas.drawParagraph(headerP, const Offset(pad, pad));
+
+    const pillFontSize = 20.0;
+    const pillH = pillFontSize + 16;
+    if (ageGroup.isNotEmpty) {
+      final pillText = ageGroup.toUpperCase();
+      final textW = _textWidth(pillText,
+          fontSize: pillFontSize, fontWeight: FontWeight.w800);
+      const pillPadH = 16.0;
+      final pillW = textW + pillPadH * 2;
+      final pillX = w - pad - pillW;
+      final pillRect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(pillX, pad - 6, pillW, pillH),
+          const Radius.circular(pillH / 2));
+      canvas.drawRRect(
+          pillRect,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..color = const Color(0xFF000000));
+      final pillTextP = _buildParagraph(
+        pillText,
+        fontSize: pillFontSize,
+        fontWeight: FontWeight.w800,
+        align: TextAlign.center,
+        maxWidth: pillW,
+      );
+      canvas.drawParagraph(pillTextP, Offset(pillX, pad - 6 + 8));
+    }
+    final headerRowH = headerP.height > pillH ? headerP.height : pillH;
+
+    // --- Footer (anchored to the bottom) ---
+    const footerFontSize = 20.0;
+    final footerRight = '$pickupCode · In ${_formatTime(checkInTime)}';
+    final footerRightW = _textWidth(footerRight,
+        fontSize: footerFontSize,
+        fontWeight: FontWeight.w600,
+        fontFamily: _monoFont);
+    final footerLeftMaxW = w - pad * 2 - footerRightW - 16;
+    final footerLeftP = _buildParagraph(
+      serviceName,
+      fontSize: footerFontSize,
+      maxWidth: footerLeftMaxW,
+    );
+    final footerRightP = _buildParagraph(
+      footerRight,
+      fontSize: footerFontSize,
+      fontWeight: FontWeight.w600,
+      fontFamily: _monoFont,
+      maxWidth: footerRightW + 2,
+    );
+    final footerY = h - pad - footerLeftP.height;
+    final dividerY = footerY - 12;
+
+    // --- Name + logo row, vertically centered in the space between the
+    // header and the footer divider (matches the design's flex layout,
+    // rather than sitting pinned right under the header). ---
+    final logoImage = await _loadLogoSilhouette();
+    const logoH = 112.0;
+    final logoW = logoH * (logoImage.width / logoImage.height);
+    final nameMaxWidth = w - pad * 2 - logoW - 20;
+    final nameP = _buildParagraph(
+      _firstName(childName),
+      fontSize: 96,
+      fontWeight: FontWeight.w800,
+      maxWidth: nameMaxWidth,
+    );
+    final nameRowH = nameP.height > logoH ? nameP.height : logoH;
+
+    // If there are notes, the notes band is grouped with the name row and
+    // the pair is centered together; otherwise it's just the name row.
+    double middleContentH = nameRowH;
+    const bandFontSize = 20.0;
+    const chipPadH = 10.0;
+    const chipPadV = 4.0;
+    const chipH = bandFontSize + chipPadV * 2;
+    ui.Paragraph? noteP;
+    double chipW = 0;
+    double bandRowH = 0;
+    const nameToBandGap = 16.0;
+    if (hasNotes) {
+      chipW = _textWidth('NOTES',
+              fontSize: bandFontSize, fontWeight: FontWeight.w800) +
+          chipPadH * 2;
+      final noteMaxW = w - pad * 2 - chipW - 14;
+      noteP = _buildParagraph(
+        specialNotes.toUpperCase(),
+        fontSize: bandFontSize,
+        fontWeight: FontWeight.w700,
+        maxWidth: noteMaxW,
+      );
+      bandRowH = chipH > noteP.height ? chipH : noteP.height;
+      middleContentH += nameToBandGap + bandRowH;
+    }
+
+    final middleTop = pad + headerRowH + 10;
+    final middleBottom = dividerY - 10;
+    final middleAvailable = middleBottom - middleTop;
+    var middleY = middleTop + (middleAvailable - middleContentH) / 2;
+    if (middleY < middleTop) middleY = middleTop;
+
+    canvas.drawParagraph(
+        nameP, Offset(pad, middleY + (nameRowH - nameP.height)));
+    final srcRect = Rect.fromLTWH(
+        0, 0, logoImage.width.toDouble(), logoImage.height.toDouble());
+    final dstRect = Rect.fromLTWH(
+        w - pad - logoW, middleY + (nameRowH - logoH), logoW, logoH);
+    canvas.drawImageRect(logoImage, srcRect, dstRect, Paint());
+
+    canvas.drawParagraph(footerLeftP, Offset(pad, footerY));
+    canvas.drawParagraph(
+        footerRightP, Offset(w - pad - footerRightW, footerY));
+
+    // --- Divider directly above the footer: 1px normally, or the notes
+    // band's own 2px border when there are notes (never both). ---
+    if (hasNotes && noteP != null) {
+      final bandY = middleY + nameRowH + nameToBandGap;
+      canvas.drawLine(Offset(pad, dividerY), Offset(w - pad, dividerY),
+          Paint()
+            ..color = const Color(0xFF000000)
+            ..strokeWidth = 2);
+      canvas.drawRect(
+          Rect.fromLTWH(pad, bandY + (bandRowH - chipH) / 2, chipW, chipH),
+          Paint()..color = const Color(0xFF000000));
+      final chipTextP = _buildParagraph(
+        'NOTES',
+        fontSize: bandFontSize,
+        fontWeight: FontWeight.w800,
+        color: const Color(0xFFFFFFFF),
+        align: TextAlign.center,
+        maxWidth: chipW,
+      );
+      canvas.drawParagraph(
+          chipTextP, Offset(pad, bandY + (bandRowH - chipH) / 2 + chipPadV));
+      canvas.drawParagraph(noteP,
+          Offset(pad + chipW + 14, bandY + (bandRowH - noteP.height) / 2));
+    } else {
+      canvas.drawLine(Offset(pad, dividerY), Offset(w - pad, dividerY),
+          Paint()
+            ..color = const Color(0xFF000000)
+            ..strokeWidth = 1);
+    }
+
+    final raster = await _finishAndRotate(recorder, w, h);
     final profile = await CapabilityProfile.load();
     final gen = Generator(PaperSize.mm80, profile);
     return [...raster, ...gen.cut()];
   }
 
-  /// PICKUP SLIP — one per check-in.
-  /// Text on left, QR code on right, all on one sticker.
+  /// PICKUP SLIP — one per check-in. Same 100 x 50mm landscape footprint
+  /// as the name tag (text on the left ~58%, QR on the right ~42%, rotated
+  /// 90° for printing): title, campus/service/date, a divider, one row
+  /// per child (name + age group, pickup code), a divider, and a
+  /// guardian line.
   Future<List<int>> _createPickupSlipCommands({
     required List<String> childIds,
     required List<String> children,
     required List<String> pickupCodes,
+    required List<String> ageGroups,
     required String guardianQrCode,
+    required String guardianName,
     required String serviceName,
     required DateTime checkInTime,
+    List<String?>? specialNotes,
   }) async {
-    final lines = <_StickerLine>[
-      _StickerLine('PICKUP SLIP', fontSize: 26, bold: true),
-    ];
-    for (int i = 0; i < children.length; i++) {
-      lines.add(_StickerLine(children[i], fontSize: 24, bold: true));
-      if (i < pickupCodes.length) {
-        lines.add(_StickerLine('CODE: ${pickupCodes[i]}', fontSize: 20));
-      }
-    }
-    lines.add(_StickerLine(
-        '$serviceName  ${_formatTime(checkInTime)}', fontSize: 18));
+    const int w = _stickerLong; // 800
+    const int h = _stickerShort; // 400
+    const double leftPad = 24;
+    const double textAreaW = w * 0.58;
+    const double contentW = textAreaW - leftPad - 14;
+    const double qrSize = 190;
 
+    // Each block is a ui.Paragraph (single line), a _ChildRowParagraph (a
+    // name/value pair drawn left+right on one line), or a _Divider (a
+    // horizontal rule). Stack them top-down, then vertically center the
+    // whole column within the fixed 400px-tall canvas.
+    final blocks = <Object>[];
+    final blockGaps = <double>[];
+
+    void addBlock(Object p, {double gapAfter = 4}) {
+      blocks.add(p);
+      blockGaps.add(gapAfter);
+    }
+
+    double blockHeight(Object b) {
+      if (b is _Divider) return 1;
+      if (b is _ChildRowParagraph) return b.height;
+      return (b as ui.Paragraph).height;
+    }
+
+    addBlock(
+      _buildParagraph('PICKUP SLIP',
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.5,
+          align: TextAlign.center,
+          maxWidth: contentW),
+      gapAfter: 8,
+    );
+    addBlock(
+      _buildParagraph('Victory · General Santos',
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          align: TextAlign.center,
+          maxWidth: contentW),
+      gapAfter: 1,
+    );
+    addBlock(
+      _buildParagraph(serviceName,
+          fontSize: 11.5, align: TextAlign.center, maxWidth: contentW),
+      gapAfter: 1,
+    );
+    final dateStr = DateFormat('EEE, MMM d yyyy').format(checkInTime.toLocal());
+    addBlock(
+      _buildParagraph('$dateStr · in ${_formatTime(checkInTime)}',
+          fontSize: 11.5, align: TextAlign.center, maxWidth: contentW),
+      gapAfter: 8,
+    );
+
+    addBlock(const _Divider(), gapAfter: 8);
+
+    for (int i = 0; i < children.length; i++) {
+      final code = i < pickupCodes.length ? pickupCodes[i] : '';
+      final ageGroup = i < ageGroups.length ? ageGroups[i] : '';
+      final note = specialNotes != null && i < specialNotes.length
+          ? specialNotes[i]
+          : null;
+      final hasNote = note != null && note.trim().isNotEmpty;
+
+      final codeW = _textWidth(code,
+          fontSize: 14, fontWeight: FontWeight.w600, fontFamily: _monoFont);
+      final nameMaxW = contentW - codeW - 10;
+      final nameP = _buildParagraph(children[i],
+          fontSize: 14, fontWeight: FontWeight.w700, maxWidth: nameMaxW);
+      final codeP = _buildParagraph(code,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          fontFamily: _monoFont,
+          align: TextAlign.right,
+          maxWidth: codeW + 2);
+      final subtext = hasNote ? '$ageGroup · notes' : ageGroup;
+      final subP = _buildParagraph(subtext, fontSize: 10.5, maxWidth: contentW);
+
+      addBlock(_ChildRowParagraph(nameP, codeP), gapAfter: 1);
+      addBlock(subP, gapAfter: 6);
+    }
+
+    addBlock(const _Divider(), gapAfter: 8);
+
+    final guardianLabelP =
+        _buildParagraph('Guardian', fontSize: 12, maxWidth: contentW * 0.4);
+    final guardianNameP = _buildParagraph(guardianName,
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        align: TextAlign.right,
+        maxWidth: contentW * 0.6);
+    addBlock(_ChildRowParagraph(guardianLabelP, guardianNameP), gapAfter: 6);
+
+    addBlock(
+      _buildParagraph('Keep this slip · required for pickup',
+          fontSize: 10.5, align: TextAlign.center, maxWidth: contentW),
+      gapAfter: 0,
+    );
+
+    double totalH = 0;
+    for (var i = 0; i < blocks.length; i++) {
+      totalH += blockHeight(blocks[i]) + blockGaps[i];
+    }
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+        Paint()..color = const Color(0xFFFFFFFF));
+
+    double y = (h - totalH) / 2;
+    if (y < 0) y = 0;
+
+    for (var i = 0; i < blocks.length; i++) {
+      final block = blocks[i];
+      if (block is _Divider) {
+        canvas.drawLine(Offset(leftPad, y), Offset(leftPad + contentW, y),
+            Paint()
+              ..color = const Color(0xFF000000)
+              ..strokeWidth = 1);
+      } else if (block is _ChildRowParagraph) {
+        canvas.drawParagraph(block.left, Offset(leftPad, y));
+        canvas.drawParagraph(
+            block.right, Offset(leftPad + contentW - block.right.width, y));
+      } else {
+        canvas.drawParagraph(block as ui.Paragraph, Offset(leftPad, y));
+      }
+      y += blockHeight(block) + blockGaps[i];
+    }
+
+    // --- QR code, centered in the right column ---
     final qrData = json.encode({
       'guardianQrCode': guardianQrCode,
       'pickupCodes': pickupCodes,
       'childIds': childIds,
     });
+    final qrPainter = QrPainter(
+      data: qrData,
+      version: QrVersions.auto,
+      color: const Color(0xFF000000),
+      emptyColor: const Color(0xFFFFFFFF),
+      gapless: false,
+    );
+    final qrX = textAreaW + ((w - textAreaW) - qrSize) / 2;
+    final qrY = (h - qrSize) / 2;
+    canvas.save();
+    canvas.translate(qrX, qrY);
+    qrPainter.paint(canvas, const Size(qrSize, qrSize));
+    canvas.restore();
 
-    final raster =
-        await _renderPickupSlipAsRaster(lines: lines, qrData: qrData);
+    final raster = await _finishAndRotate(recorder, w, h);
     final profile = await CapabilityProfile.load();
     final gen = Generator(PaperSize.mm80, profile);
     return [...raster, ...gen.cut()];
@@ -1002,7 +1293,15 @@ If permissions are still denied, you may need to:
       ageGroup: '',
       serviceName: serviceSession,
       checkInTime: checkinTime,
+      pickupCode: pickupCode,
     );
+  }
+
+  /// First token of a full name, for the name tag's big display name.
+  String _firstName(String fullName) {
+    final trimmed = fullName.trim();
+    if (trimmed.isEmpty) return trimmed;
+    return trimmed.split(RegExp(r'\s+')).first;
   }
 
   /// Format time for display
@@ -1087,8 +1386,13 @@ If permissions are still denied, you may need to:
       // M90 / REGO RG-KL532A-H uses 80mm paper (576 dots/line, 72mm effective)
       final generator = Generator(PaperSize.mm80, profile);
 
-      // Convert image to ESC/POS raster commands
-      final List<int> rasterCommands = generator.imageRaster(decoded);
+      // Convert image to ESC/POS raster commands. Our bitmap is already
+      // narrower than the printer's full 576-dot line (by design — the
+      // sticker/slip canvas owns its own margins), so force left alignment
+      // here; otherwise imageRaster's default PosAlign.center adds the
+      // printer's own extra offset on top of ours.
+      final List<int> rasterCommands =
+          generator.imageRaster(decoded, align: PosAlign.left);
 
       print('🖨️ Generated ${rasterCommands.length} ESC/POS raster commands');
 
@@ -1126,10 +1430,18 @@ If permissions are still denied, you may need to:
   }
 }
 
-class _StickerLine {
-  final String text;
-  final double fontSize;
-  final bool bold;
+/// A two-column line (label/value or name/code) drawn left+right within
+/// the same row on a print-sticker canvas.
+class _ChildRowParagraph {
+  final ui.Paragraph left;
+  final ui.Paragraph right;
 
-  const _StickerLine(this.text, {this.fontSize = 24, this.bold = false});
+  _ChildRowParagraph(this.left, this.right);
+
+  double get height => left.height > right.height ? left.height : right.height;
+}
+
+/// A horizontal rule block on a print-sticker canvas.
+class _Divider {
+  const _Divider();
 }

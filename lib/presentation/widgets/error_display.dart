@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../data/models/api_error_model.dart';
 import '../../core/utils/error_utils.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Reusable error display widget that handles different error types
 class ErrorDisplay extends StatelessWidget {
@@ -38,7 +39,7 @@ class ErrorDisplay extends StatelessWidget {
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
         color: _getErrorColor(errorCategory),
-        borderRadius: BorderRadius.circular(8.0),
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
         border: Border.all(
           color: _getErrorBorderColor(errorCategory),
           width: 1.0,
@@ -192,73 +193,21 @@ class ErrorDisplay extends StatelessWidget {
     );
   }
 
-  Color _getErrorColor(String category) {
-    switch (category) {
-      case 'validation':
-        return Colors.orange.shade50;
-      case 'authentication':
-        return Colors.red.shade50;
-      case 'permission':
-        return Colors.purple.shade50;
-      case 'server':
-        return Colors.red.shade50;
-      case 'network':
-        return Colors.blue.shade50;
-      default:
-        return Colors.grey.shade50;
-    }
-  }
+  // Only two tones, matching the design's error semantics: amber for
+  // recoverable/soft issues (e.g. validation), red for hard blocking errors.
+  bool _isWarning(String category) => category == 'validation';
 
-  Color _getErrorBorderColor(String category) {
-    switch (category) {
-      case 'validation':
-        return Colors.orange.shade200;
-      case 'authentication':
-        return Colors.red.shade200;
-      case 'permission':
-        return Colors.purple.shade200;
-      case 'server':
-        return Colors.red.shade200;
-      case 'network':
-        return Colors.blue.shade200;
-      default:
-        return Colors.grey.shade200;
-    }
-  }
+  Color _getErrorColor(String category) =>
+      _isWarning(category) ? AppTheme.warningBg : AppTheme.errorBg;
 
-  Color _getErrorTextColor(String category) {
-    switch (category) {
-      case 'validation':
-        return Colors.orange.shade800;
-      case 'authentication':
-        return Colors.red.shade800;
-      case 'permission':
-        return Colors.purple.shade800;
-      case 'server':
-        return Colors.red.shade800;
-      case 'network':
-        return Colors.blue.shade800;
-      default:
-        return Colors.grey.shade800;
-    }
-  }
+  Color _getErrorBorderColor(String category) =>
+      _isWarning(category) ? AppTheme.warningBorder : AppTheme.errorBorder;
 
-  Color _getErrorIconColor(String category) {
-    switch (category) {
-      case 'validation':
-        return Colors.orange.shade600;
-      case 'authentication':
-        return Colors.red.shade600;
-      case 'permission':
-        return Colors.purple.shade600;
-      case 'server':
-        return Colors.red.shade600;
-      case 'network':
-        return Colors.blue.shade600;
-      default:
-        return Colors.grey.shade600;
-    }
-  }
+  Color _getErrorTextColor(String category) =>
+      _isWarning(category) ? AppTheme.warningText : AppTheme.error;
+
+  Color _getErrorIconColor(String category) =>
+      _isWarning(category) ? AppTheme.warningTextStrong : AppTheme.error;
 
   IconData _getErrorIcon(String category) {
     switch (category) {

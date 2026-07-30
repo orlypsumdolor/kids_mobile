@@ -9,6 +9,7 @@ class ChildModel {
   final List<String> guardianIds; // Changed from single guardianId to list
   final EmergencyContactModel? emergencyContact;
   final String? specialNotes;
+  final String? medicalNotes;
   final String? qrCode;
   final String? rfidTag;
   final bool isActive;
@@ -29,6 +30,7 @@ class ChildModel {
     required this.guardianIds, // Updated parameter
     this.emergencyContact,
     this.specialNotes,
+    this.medicalNotes,
     this.qrCode,
     this.rfidTag,
     required this.isActive,
@@ -96,6 +98,7 @@ class ChildModel {
             ? EmergencyContactModel.fromJson(json['emergencyContact'])
             : null,
         specialNotes: json['specialNotes'] ?? '',
+        medicalNotes: json['medicalNotes'] ?? '',
         qrCode: json['qrCode'] ?? '',
         rfidTag: json['rfidTag'] ?? '',
         isActive: json['isActive'] ?? true,
@@ -136,6 +139,7 @@ class ChildModel {
       'guardian_ids': guardianIds, // Updated
       'emergency_contact': emergencyContact?.toJson().toString(),
       'special_notes': specialNotes,
+      'medical_notes': medicalNotes,
       'qr_code': qrCode,
       'rfid_tag': rfidTag,
       'is_active': isActive ? 1 : 0,
@@ -159,6 +163,7 @@ class ChildModel {
       guardianIds: guardianIds, // Updated
       emergencyContact: emergencyContact?.toEntity(),
       specialNotes: specialNotes,
+      medicalNotes: medicalNotes,
       qrCode: qrCode,
       rfidTag: rfidTag,
       isActive: isActive,

@@ -6,8 +6,13 @@ import 'dart:async';
 import 'dart:convert';
 import '../../providers/checkout_provider.dart';
 import '../../providers/checkin_provider.dart';
+import '../../widgets/app_shell_header.dart';
+import '../../widgets/inline_error_banner.dart';
+import '../../widgets/motion.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/services/hardware_scanner_service.dart';
+import '../../../core/services/printer_service.dart';
+import '../../../core/theme/app_theme.dart';
 
 class CheckoutPage extends StatefulWidget {
   const CheckoutPage({super.key});
@@ -17,7 +22,7 @@ class CheckoutPage extends StatefulWidget {
 }
 
 class _CheckoutPageState extends State<CheckoutPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   bool _isLoading = false;
   String? _error;
   String? _successMessage;
@@ -30,11 +35,19 @@ class _CheckoutPageState extends State<CheckoutPage>
   late final FocusNode _scannerFocusNode;
   StreamSubscription<String>? _scannerSubscription;
 
+  // Idle-scan sweep-line animation
+  late final AnimationController _sweepController;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _scannerFocusNode = FocusNode(debugLabel: 'checkoutScanner');
+
+    _sweepController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
 
     final scannerService = context.read<HardwareScannerService>();
     _scannerSubscription = scannerService.onBarcodeScanned.listen((barcode) {
@@ -49,6 +62,7 @@ class _CheckoutPageState extends State<CheckoutPage>
   void dispose() {
     _scannerSubscription?.cancel();
     _scannerFocusNode.dispose();
+    _sweepController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -112,9 +126,7 @@ class _CheckoutPageState extends State<CheckoutPage>
       final pickupCodes = decoded['pickupCodes'];
       final childIds = decoded['childIds'];
 
-      if (guardianQr is! String ||
-          pickupCodes is! List ||
-          childIds is! List) {
+      if (guardianQr is! String || pickupCodes is! List || childIds is! List) {
         throw const FormatException('Invalid data types in QR payload');
       }
 
@@ -149,8 +161,7 @@ class _CheckoutPageState extends State<CheckoutPage>
 
     try {
       final guardianId = _scannedQrData!['guardianQrCode'] as String;
-      final childIds =
-          (_scannedQrData!['childIds'] as List).cast<String>();
+      final childIds = (_scannedQrData!['childIds'] as List).cast<String>();
       final pickupCodes =
           (_scannedQrData!['pickupCodes'] as List).cast<String>();
 
@@ -163,12 +174,11 @@ class _CheckoutPageState extends State<CheckoutPage>
 
       if (records.isNotEmpty) {
         final names = _childInfo != null
-            ? _childInfo!.map((c) => c['name']).join(', ')
+            ? _childInfo!.map((c) => c['name']).join(' · ')
             : '${records.length} child(ren)';
 
         setState(() {
-          _successMessage =
-              'Successfully checked out $names';
+          _successMessage = names;
           _scannedQrData = null;
           _childInfo = null;
         });
@@ -192,6 +202,8 @@ class _CheckoutPageState extends State<CheckoutPage>
 
   @override
   Widget build(BuildContext context) {
+    final printerConnected = context.watch<PrinterService>().isConnected;
+
     return Focus(
       focusNode: _scannerFocusNode,
       autofocus: true,
@@ -199,21 +211,19 @@ class _CheckoutPageState extends State<CheckoutPage>
       child: GestureDetector(
         onTap: () => _scannerFocusNode.requestFocus(),
         child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Check-Out'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            foregroundColor: Colors.white,
-            actions: [
-              if (_scannedQrData != null)
-                IconButton(
-                  onPressed: _resetForm,
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Start Over',
-                ),
+          backgroundColor: AppTheme.pageBackground,
+          body: Column(
+            children: [
+              AppShellHeader(
+                title: 'Check Out',
+                subtitle: 'Pickup slip',
+                showBackButton: true,
+                onBack: () => context.pop(),
+                onSettings: () => context.push(AppRouter.settings),
+                printerConnected: printerConnected,
+              ),
+              Expanded(child: _buildBody()),
             ],
-          ),
-          body: SafeArea(
-            child: _buildBody(),
           ),
         ),
       ),
@@ -226,9 +236,10 @@ class _CheckoutPageState extends State<CheckoutPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
+            CircularProgressIndicator(color: AppTheme.green),
             SizedBox(height: 16),
-            Text('Processing...'),
+            Text('Processing...',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ],
         ),
       );
@@ -250,79 +261,113 @@ class _CheckoutPageState extends State<CheckoutPage>
   }
 
   Widget _buildWaitingForScan() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: Theme.of(context)
-                    .colorScheme
-                    .secondary
-                    .withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.qr_code_scanner,
-                size: 80,
-                color: Theme.of(context).colorScheme.secondary,
-              ),
-            ),
-            const SizedBox(height: 32),
-            Text(
-              'Scan Pickup Slip',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Scan the pickup slip QR code using the\nkiosk scanner or the camera button below',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey[600],
-                    height: 1.5,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Row(
+    return Stack(
+      children: [
+        const Positioned(
+          left: 20,
+          bottom: 24,
+          child: HardwarePointer(label: 'Scanner', color: AppTheme.green),
+        ),
+        Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
+                  width: double.infinity,
+                  constraints:
+                      const BoxConstraints(maxWidth: 420, minHeight: 300),
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(28),
+                    border:
+                        Border.all(color: const Color(0xFFB9C6DC), width: 2),
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.hardEdge,
+                    children: [
+                      AnimatedBuilder(
+                        animation: _sweepController,
+                        builder: (context, child) {
+                          return Align(
+                            alignment: Alignment(
+                                0, _sweepController.value * 1.8 - 0.9),
+                            child: Container(
+                              height: 3,
+                              margin:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    AppTheme.green.withValues(alpha: 0),
+                                    AppTheme.green,
+                                    AppTheme.green.withValues(alpha: 0),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ScanPulse(
+                            child: Container(
+                              width: 84,
+                              height: 84,
+                              decoration: BoxDecoration(
+                                color: AppTheme.textPrimary,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.qr_code,
+                                    color: Colors.white, size: 44),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Scan pickup slip',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            "The QR on the guardian's slip",
+                            style: TextStyle(
+                                fontSize: 13.5, color: AppTheme.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Kiosk scanner ready',
-                  style: TextStyle(
-                    color: Colors.green[700],
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
+                const SizedBox(height: 20),
+                OutlinedButton.icon(
+                  onPressed: _openCameraScanner,
+                  icon: const Icon(Icons.camera_alt, size: 18),
+                  label: const Text('Use camera instead'),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Lost slip? A staff member can release with ID verification.',
+                  textAlign: TextAlign.center,
+                  style:
+                      TextStyle(fontSize: 12.5, color: AppTheme.textSecondary),
                 ),
               ],
             ),
-            const SizedBox(height: 32),
-            OutlinedButton.icon(
-              onPressed: _openCameraScanner,
-              icon: const Icon(Icons.camera_alt),
-              label: const Text('Use Camera Instead'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 14),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -332,198 +377,205 @@ class _CheckoutPageState extends State<CheckoutPage>
         : (_scannedQrData!['childIds'] as List)
             .map((id) => id.toString())
             .toList();
-    final pickupCodes =
-        (_scannedQrData!['pickupCodes'] as List).cast<String>();
+    final pickupCodes = (_scannedQrData!['pickupCodes'] as List).cast<String>();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_error != null) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.shade200),
-              ),
-              child: Row(
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: RiseIn(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(Icons.error_outline, color: Colors.red.shade700),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _error!,
-                      style: TextStyle(color: Colors.red.shade700),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius:
+                          BorderRadius.circular(AppTheme.radiusCardLarge),
+                      border: Border.all(color: AppTheme.hairline),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: const BoxDecoration(
+                            color: AppTheme.green,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.qr_code, color: Colors.white),
+                        ),
+                        const SizedBox(width: 14),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'SLIP VERIFIED',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1,
+                                  color: AppTheme.green,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Pickup slip scanned',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.2,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.qr_code,
-                          color: Theme.of(context).colorScheme.primary,
-                          size: 28),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Pickup Slip Scanned',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 32),
-                  Text(
-                    'Children to check out:',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall
-                        ?.copyWith(color: Colors.grey[600]),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "Check each name and code against the slip in the guardian's hand.",
+                    style: TextStyle(
+                        fontSize: 13.5,
+                        color: AppTheme.textTertiary,
+                        height: 1.4),
                   ),
                   const SizedBox(height: 12),
                   ...List.generate(childNames.length, (i) {
-                    final code =
-                        i < pickupCodes.length ? pickupCodes[i] : '';
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
+                    final code = i < pickupCodes.length ? pickupCodes[i] : '';
+                    final color = const [
+                      AppTheme.green,
+                      AppTheme.blue,
+                      AppTheme.yellow,
+                      AppTheme.magenta,
+                    ][i % 4];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusCard),
+                        border: Border.all(color: AppTheme.hairline, width: 2),
+                      ),
                       child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(8),
+                            width: 4,
+                            height: 32,
                             decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .secondary
-                                  .withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
+                              color: color,
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusPill),
                             ),
-                            child: Icon(Icons.child_care,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .secondary),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  childNames[i],
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                if (code.isNotEmpty)
-                                  Text(
-                                    'Code: $code',
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                              ],
+                            child: Text(
+                              childNames[i],
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.1,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (code.isNotEmpty)
+                            Text(code, style: AppTheme.mono(fontSize: 15)),
                         ],
                       ),
                     );
                   }),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    InlineErrorBanner(
+                      message: _error!,
+                      onDismiss: () => setState(() => _error = null),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 24),
-          Row(
+        ),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: const BoxDecoration(
+            color: AppTheme.surface,
+            border: Border(top: BorderSide(color: AppTheme.hairline)),
+          ),
+          child: Row(
             children: [
+              OutlinedButton(
+                  onPressed: _resetForm, child: const Text('Cancel')),
+              const SizedBox(width: 12),
               Expanded(
-                child: OutlinedButton(
-                  onPressed: _resetForm,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: const Text('Cancel'),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
+                child: ElevatedButton(
                   onPressed: _performCheckout,
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Confirm Check-Out'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        Theme.of(context).colorScheme.secondary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    textStyle: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: AppTheme.green),
+                  child: const Text('Confirm check-out'),
                 ),
               ),
             ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _buildSuccess() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.check_circle,
-                  size: 80, color: Colors.green.shade600),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Check-Out Successful!',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green.shade700,
+    return Container(
+      color: AppTheme.successBg,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: RiseIn(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 62,
+                  height: 62,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.green,
+                    shape: BoxShape.circle,
                   ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _successMessage!,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey[700],
+                  child: const Icon(Icons.check, color: Colors.white, size: 32),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Checked out',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                    color: AppTheme.textPrimary,
                   ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _successMessage!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 14.5, color: AppTheme.successText),
+                ),
+                const SizedBox(height: 28),
+                ElevatedButton(
+                  onPressed: _resetForm,
+                  child: const Text('Next guardian'),
+                ),
+              ],
             ),
-            const SizedBox(height: 32),
-            OutlinedButton(
-              onPressed: _resetForm,
-              child: const Text('Check Out Another'),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -537,34 +589,37 @@ class _CheckoutPageState extends State<CheckoutPage>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(24),
+              width: 84,
+              height: 84,
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                shape: BoxShape.circle,
+                color: AppTheme.errorBg,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppTheme.errorBorder, width: 2),
               ),
-              child: Icon(Icons.error_outline,
-                  size: 80, color: Colors.red.shade600),
+              child: const Icon(Icons.error_outline,
+                  size: 36, color: AppTheme.error),
             ),
             const SizedBox(height: 24),
-            Text(
-              'Error',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red.shade700,
-                  ),
+            const Text(
+              'Unreadable slip',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
+                color: AppTheme.textPrimary,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               _error!,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey[700],
-                  ),
+              style:
+                  const TextStyle(fontSize: 14, color: AppTheme.textTertiary),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _resetForm,
-              child: const Text('Try Again'),
+              child: const Text('Scan again'),
             ),
           ],
         ),

@@ -9,6 +9,7 @@ class Child extends Equatable {
   final List<String> guardianIds; // Changed from single guardianId to list
   final EmergencyContact? emergencyContact;
   final String? specialNotes;
+  final String? medicalNotes;
   final String? qrCode;
   final String? rfidTag;
   final bool isActive;
@@ -29,6 +30,7 @@ class Child extends Equatable {
     required this.guardianIds, // Updated parameter
     this.emergencyContact,
     this.specialNotes,
+    this.medicalNotes,
     this.qrCode,
     this.rfidTag,
     required this.isActive,
@@ -68,6 +70,18 @@ class Child extends Equatable {
   }
 
   bool get hasSpecialNotes => specialNotes != null && specialNotes!.isNotEmpty;
+  bool get hasMedicalNotes => medicalNotes != null && medicalNotes!.isNotEmpty;
+  bool get hasNotes => hasMedicalNotes || hasSpecialNotes;
+
+  /// Medical notes and special notes combined into one display string
+  /// (e.g. for the printed name tag's notes band).
+  String? get combinedNotes {
+    final parts = [
+      if (hasMedicalNotes) medicalNotes!.trim(),
+      if (hasSpecialNotes) specialNotes!.trim(),
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
   bool get hasEmergencyContact => emergencyContact != null;
 
   // New helper getters for guardian support
@@ -85,6 +99,7 @@ class Child extends Equatable {
         guardianIds, // Updated
         emergencyContact,
         specialNotes,
+        medicalNotes,
         qrCode,
         rfidTag,
         isActive,

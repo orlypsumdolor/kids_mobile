@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/theme/app_theme.dart';
 
 class PickupCodeInput extends StatelessWidget {
   final TextEditingController controller;
@@ -19,11 +20,9 @@ class PickupCodeInput extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Enter Pickup Code',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -34,10 +33,10 @@ class PickupCodeInput extends StatelessWidget {
                 prefixIcon: Icon(Icons.confirmation_number),
               ),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
+              style: AppTheme.mono(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 3,
               ),
               maxLength: 6,
               inputFormatters: [
@@ -51,10 +50,7 @@ class PickupCodeInput extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () => onSubmit(controller.text),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.green),
                 child: const Text(
                   'Verify & Check Out',
                   style: TextStyle(fontSize: 16),

@@ -1,7 +1,7 @@
 class ApiConstants {
   // Update this to your actual API URL
   static const String baseUrl =
-      'http://192.168.254.153:3000'; // Local development - corrected port
+      'http://100.81.203.57:3000'; // Local development - corrected port
   // static const String baseUrl = 'https://api.kidschurch.com'; // Production
 
   // Auth endpoints

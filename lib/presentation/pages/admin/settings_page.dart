@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_usb_thermal_plugin/model/usb_device_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/app_shell_header.dart';
 import '../../../core/models/connected_printer_info.dart';
 import '../../../core/services/printer_service.dart';
-import '../../../domain/entities/child.dart';
-import '../../../domain/entities/checkin_session.dart';
+import '../../../core/router/app_router.dart';
+import '../../../core/theme/app_theme.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -15,7 +17,6 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  bool notificationsEnabled = true;
   late PrinterService _printerService;
   bool _isScanning = false;
   List<dynamic> _availableDevices = [];
@@ -61,14 +62,14 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Printer disconnected successfully'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppTheme.green,
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to disconnect printer: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.error,
         ),
       );
     }
@@ -97,7 +98,7 @@ class _SettingsPageState extends State<SettingsPage> {
               content: const Text(
                 'Bluetooth permission required. Enable "Nearby devices" and "Location" in app Settings to scan for printers.',
               ),
-              backgroundColor: Colors.orange,
+              backgroundColor: AppTheme.warningTextStrong,
               duration: const Duration(seconds: 5),
               action: SnackBarAction(
                 label: 'Open Settings',
@@ -112,7 +113,7 @@ class _SettingsPageState extends State<SettingsPage> {
               content: Text(
                 'No printers found. Make sure Bluetooth is on and your printer is discoverable.',
               ),
-              backgroundColor: Colors.orange,
+              backgroundColor: AppTheme.warningTextStrong,
             ),
           );
         }
@@ -125,7 +126,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to scan for printers: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.error,
         ),
       );
     }
@@ -152,7 +153,7 @@ class _SettingsPageState extends State<SettingsPage> {
             const SnackBar(
               content: Text(
                   'No USB printers found. Connect a USB printer and try again.'),
-              backgroundColor: Colors.orange,
+              backgroundColor: AppTheme.warningTextStrong,
             ),
           );
         }
@@ -164,7 +165,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to scan for USB printers: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.error,
           ),
         );
       }
@@ -182,7 +183,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SnackBar(
             content:
                 Text('Connected to ${device.name ?? 'Unknown'} successfully'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.green,
           ),
         );
         Navigator.pop(context);
@@ -190,7 +191,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to connect to ${device.name ?? 'Unknown'}'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.error,
           ),
         );
       }
@@ -198,7 +199,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error connecting to printer: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.error,
         ),
       );
     }
@@ -212,7 +213,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Invalid USB printer'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.error,
           ),
         );
         return;
@@ -232,7 +233,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Connected to $name (USB) successfully'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.green,
           ),
         );
         Navigator.pop(context);
@@ -240,7 +241,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to connect to $name'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.error,
           ),
         );
       }
@@ -248,7 +249,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error connecting to USB printer: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.error,
         ),
       );
     }
@@ -257,311 +258,215 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // User Info Section
-            Consumer<AuthProvider>(
-              builder: (context, authProvider, child) {
-                final user = authProvider.currentUser;
-                if (user == null) return const SizedBox.shrink();
-
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
+      backgroundColor: AppTheme.pageBackground,
+      body: Column(
+        children: [
+          AppShellHeader(
+            title: 'Settings',
+            showBackButton: true,
+            onBack: () => context.pop(),
+            onSettings: () {},
+            printerConnected: _connectedDevice != null,
+          ),
+          Expanded(
+            child: SafeArea(
+              top: false,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // Printer Settings
+                  _SettingsCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'User Information',
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                        const SizedBox(height: 12),
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            CircleAvatar(
-                              backgroundColor:
-                                  Theme.of(context).colorScheme.primary,
-                              radius: 30,
-                              child: Text(
-                                user.firstName[0].toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    user.fullName,
-                                    style:
-                                        Theme.of(context).textTheme.titleMedium,
-                                  ),
-                                  Text(
-                                    user.email,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.copyWith(
-                                          color: Colors.grey[600],
-                                        ),
-                                  ),
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 4),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                          .withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(12),
+                                  const Text(
+                                    'PRINTER',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1,
+                                      color: AppTheme.textSecondary,
                                     ),
-                                    child: Text(
-                                      user.role.toUpperCase(),
-                                      style: TextStyle(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _connectedDevice?.name ?? 'No printer',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
+                                  Text(
+                                    _connectedDevice != null
+                                        ? 'Connected · ${_connectedDevice!.isUsb ? 'USB' : 'Bluetooth'}'
+                                        : 'Not connected',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: _connectedDevice != null
+                                          ? const Color(0xFF1F6E39)
+                                          : const Color(0xFF8E2A1F),
                                     ),
                                   ),
                                 ],
                               ),
+                            ),
+                            OutlinedButton(
+                              onPressed: _connectedDevice != null
+                                  ? _disconnectPrinter
+                                  : _showPrinterSelection,
+                              child: Text(
+                                _connectedDevice != null ? 'Disconnect' : 'Connect',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            ElevatedButton(
+                              onPressed: _testPrint,
+                              child: const Text('Test print'),
+                            ),
+                            OutlinedButton(
+                              onPressed: () =>
+                                  _showPrinterSelection(forceUsb: false, autoScan: true),
+                              child: const Text('Scan Bluetooth'),
+                            ),
+                            OutlinedButton(
+                              onPressed: () =>
+                                  _showPrinterSelection(forceUsb: true, autoScan: true),
+                              child: const Text('Scan USB'),
                             ),
                           ],
                         ),
                       ],
                     ),
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
-            // App Settings
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'App Settings',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
+                  // Scanner status
+                  _SettingsCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'SCANNER',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                            color: AppTheme.textSecondary,
                           ),
-                    ),
-                    const SizedBox(height: 16),
-                    SwitchListTile(
-                      title: const Text('Notifications'),
-                      subtitle: const Text('Receive app notifications'),
-                      value: notificationsEnabled,
-                      onChanged: (value) {
-                        setState(() {
-                          notificationsEnabled = value;
-                        });
-                      },
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Printer Settings
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Printer Settings',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 16),
-                    ListTile(
-                      title: const Text('Connected Printer'),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(_connectedDevice != null
-                              ? '${_connectedDevice!.name} (${_connectedDevice!.addressOrId})'
-                              : 'No printer connected'),
-                          if (_connectedDevice != null)
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
                             Container(
-                              margin: const EdgeInsets.only(top: 4),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.green),
-                              ),
-                              child: const Text(
-                                'CONNECTED',
-                                style: TextStyle(
-                                  color: Colors.green,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                              width: 9,
+                              height: 9,
+                              decoration: const BoxDecoration(
+                                color: AppTheme.green,
+                                shape: BoxShape.circle,
                               ),
                             ),
-                        ],
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_connectedDevice != null)
-                            IconButton(
-                              icon: Icon(
-                                _connectedDevice!.isUsb
-                                    ? Icons.usb_off
-                                    : Icons.bluetooth_disabled,
-                                color: Colors.red,
-                              ),
-                              onPressed: _disconnectPrinter,
-                              tooltip: 'Disconnect',
+                            const SizedBox(width: 8),
+                            const Text(
+                              'MS-M7710 · USB-HID',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                             ),
-                          IconButton(
-                            icon: Icon(
-                                _isScanning ? Icons.refresh : Icons.refresh,
-                                color: _isScanning ? Colors.grey : Colors.blue),
-                            onPressed: _isScanning ? null : _scanForPrinters,
-                            tooltip: 'Scan for printers',
-                          ),
-                          IconButton(
-                            icon:
-                                const Icon(Icons.refresh, color: Colors.green),
-                            onPressed: _refreshPrinterStatus,
-                            tooltip: 'Refresh printer status',
-                          ),
-                          const Icon(Icons.arrow_forward_ios, size: 16),
-                        ],
-                      ),
-                      onTap: _showPrinterSelection,
-                      contentPadding: EdgeInsets.zero,
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Keyboard wedge · ready',
+                          style: TextStyle(fontSize: 12.5, color: AppTheme.textSecondary),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton(
+                          onPressed: () => _testPrint(),
+                          child: const Text('View sticker & slip layout'),
+                        ),
+                      ],
                     ),
-                    const Divider(),
-                    ListTile(
-                      title: const Text('Test Print'),
-                      subtitle: const Text('Print a test sticker'),
-                      trailing: const Icon(Icons.print),
-                      onTap: _testPrint,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    const Divider(),
-                    ListTile(
-                      title: const Text('Clear Saved Connection'),
-                      subtitle: const Text('Remove saved printer connection'),
-                      trailing: const Icon(Icons.clear, color: Colors.orange),
-                      onTap: _clearSavedConnection,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
+                  ),
+                  const SizedBox(height: 16),
 
-            // Data Management
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Data Management',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 16),
-                    ListTile(
-                      title: const Text('Clear Cache'),
-                      subtitle: const Text('Clear locally cached data'),
-                      trailing: const Icon(Icons.clear_all),
-                      onTap: _clearCache,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    const Divider(),
-                    ListTile(
-                      title: const Text('Export Data'),
-                      subtitle: const Text('Export attendance data'),
-                      trailing: const Icon(Icons.download),
-                      onTap: _exportData,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
+                  const _SettingsGapBanner(),
+                  const SizedBox(height: 16),
 
-            // About
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'About',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                  // User info + logout
+                  _SettingsCard(
+                    child: Consumer<AuthProvider>(
+                      builder: (context, authProvider, child) {
+                        final user = authProvider.currentUser;
+                        if (user == null) return const SizedBox.shrink();
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    user.fullName,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${user.role} · v1.0.0',
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            OutlinedButton(
+                              onPressed: () async {
+                                await context.read<AuthProvider>().logout();
+                                if (context.mounted) {
+                                  context.go(AppRouter.login);
+                                }
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppTheme.error,
+                                side: const BorderSide(color: AppTheme.errorBorder, width: 1.5),
+                              ),
+                              child: const Text('Log out'),
+                            ),
+                          ],
+                        );
+                      },
                     ),
-                    const SizedBox(height: 16),
-                    const ListTile(
-                      title: Text('App Version'),
-                      subtitle: Text('1.0.0'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    ListTile(
-                      title: const Text('Privacy Policy'),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () {},
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    ListTile(
-                      title: const Text('Terms of Service'),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () {},
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  void _showPrinterSelection() {
-    _showUsbDevices = false;
+  void _showPrinterSelection({bool? forceUsb, bool autoScan = false}) {
+    _showUsbDevices = forceUsb ?? false;
+    bool didAutoScan = false;
 
     showModalBottomSheet(
       context: context,
@@ -571,6 +476,18 @@ class _SettingsPageState extends State<SettingsPage> {
           void refreshModal() {
             setModalState(() {
               _connectedDevice = _printerService.connectedDevice;
+            });
+          }
+
+          if (autoScan && !didAutoScan) {
+            didAutoScan = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              setModalState(() => _isScanning = true);
+              if (_showUsbDevices) {
+                _scanForUsbPrinters(() => setModalState(() {}));
+              } else {
+                _scanForPrinters(() => setModalState(() {}));
+              }
             });
           }
 
@@ -598,7 +515,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         style: OutlinedButton.styleFrom(
                           backgroundColor: _showUsbDevices
                               ? null
-                              : Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                              : Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                         ),
                         onPressed: () {
                           setModalState(() {
@@ -621,7 +538,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         style: OutlinedButton.styleFrom(
                           backgroundColor: !_showUsbDevices
                               ? null
-                              : Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                              : Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                         ),
                         onPressed: () {
                           setModalState(() {
@@ -644,7 +561,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                     IconButton(
-                      icon: Icon(_isScanning ? Icons.refresh : Icons.refresh),
+                      icon: const Icon(Icons.refresh),
                       onPressed: _isScanning
                           ? null
                           : () {
@@ -826,7 +743,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please connect to a printer first'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppTheme.warningTextStrong,
         ),
       );
       return;
@@ -838,8 +755,10 @@ class _SettingsPageState extends State<SettingsPage> {
         childIds: ['test-001', 'test-002'],
         children: ['Juan Dela Cruz Jr.', 'Maria Dela Cruz'],
         pickupCodes: ['ABC123', 'XYZ789'],
-        ageGroups: ['Preschool', 'Toddlers'],
+        ageGroups: ['Jr. Kids', 'Toddlers'],
+        specialNotes: ['Peanut allergy · EpiPen in bag', null],
         guardianQrCode: 'GUARDIAN-001',
+        guardianName: 'Test Guardian',
         serviceName: 'Sunday Service',
         checkInTime: DateTime.now(),
       );
@@ -848,14 +767,14 @@ class _SettingsPageState extends State<SettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Test print sent to printer successfully'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.green,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Test print failed'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.error,
           ),
         );
       }
@@ -863,77 +782,71 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Test print error: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.error,
         ),
       );
     }
   }
 
-  void _clearCache() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear Cache'),
-        content: const Text(
-            'This will clear all locally cached data. Are you sure?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Cache cleared successfully'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text('Clear'),
-          ),
-        ],
+}
+
+class _SettingsCard extends StatelessWidget {
+  final Widget child;
+
+  const _SettingsCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        border: Border.all(color: AppTheme.hairline),
       ),
+      child: child,
     );
   }
+}
 
-  void _exportData() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Data export started'),
-        backgroundColor: Colors.blue,
+class _SettingsGapBanner extends StatelessWidget {
+  const _SettingsGapBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.warningBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+        border: Border.all(color: AppTheme.warningBorder, width: 1.5),
       ),
-    );
-  }
-
-  void _clearSavedConnection() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear Saved Connection'),
-        content: const Text(
-            'This will remove the saved printer connection. Are you sure?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF6E3B8),
+              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+            ),
+            child: const Text(
+              'GAP §8',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+                color: AppTheme.warningText,
+              ),
+            ),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _printerService.clearSavedConnection();
-              setState(() {
-                _connectedDevice = null;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Saved printer connection cleared'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text('Clear'),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Clear Cache, Export Data, Privacy and Terms are stubs today, and RFID is disabled at the service layer — all four are left out of this design until they do something. Demo credentials are gone from Login.',
+              style: TextStyle(fontSize: 12.5, color: Color(0xFF6B5220), height: 1.4),
+            ),
           ),
         ],
       ),

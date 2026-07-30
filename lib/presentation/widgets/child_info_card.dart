@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../domain/entities/child.dart';
+import '../../core/theme/app_theme.dart';
 
 class ChildInfoCard extends StatelessWidget {
   final Child child;
@@ -12,7 +13,11 @@ class ChildInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 4,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        side: const BorderSide(color: AppTheme.hairline),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -21,7 +26,7 @@ class ChildInfoCard extends StatelessWidget {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  backgroundColor: AppTheme.navy,
                   radius: 30,
                   child: Text(
                     child.firstName.isNotEmpty
@@ -54,23 +59,20 @@ class ChildInfoCard extends StatelessWidget {
                 ),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: child.isActive
-                        ? Theme.of(context)
-                            .colorScheme
-                            .secondary
-                            .withOpacity(0.1)
-                        : Colors.grey.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+                        ? const Color(0xFFE6F5EA)
+                        : AppTheme.chipNeutralBg,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusPill),
                   ),
                   child: Text(
                     child.isActive ? 'ACTIVE' : 'INACTIVE',
                     style: TextStyle(
                       color: child.isActive
-                          ? Theme.of(context).colorScheme.secondary
-                          : Colors.grey,
-                      fontWeight: FontWeight.w600,
+                          ? const Color(0xFF1F6E39)
+                          : AppTheme.textTertiary,
+                      fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),
                   ),
@@ -83,8 +85,8 @@ class ChildInfoCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
+                color: AppTheme.pageBackground,
+                borderRadius: BorderRadius.circular(AppTheme.radiusButton),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -99,10 +101,10 @@ class ChildInfoCard extends StatelessWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.person_outline,
                         size: 16,
-                        color: Colors.grey[600],
+                        color: AppTheme.textSecondary,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -115,16 +117,16 @@ class ChildInfoCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Row(
+                  const Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(
                         Icons.info_outline,
                         size: 16,
-                        color: Colors.grey[600],
+                        color: AppTheme.textSecondary,
                       ),
-                      const SizedBox(width: 8),
-                      const Expanded(
+                      SizedBox(width: 8),
+                      Expanded(
                         child: Text(
                           'Note: Guardian details need to be fetched separately',
                           overflow: TextOverflow.ellipsis,
@@ -137,41 +139,41 @@ class ChildInfoCard extends StatelessWidget {
               ),
             ),
 
-            // Special Notes (if any)
-            if (child.hasSpecialNotes) ...[
+            // Notes (medical + special, if any)
+            if (child.hasNotes) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange[200]!),
+                  color: AppTheme.warningBg,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+                  border: Border.all(color: AppTheme.warningBorder),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.medical_information_outlined,
                           size: 16,
-                          color: Colors.orange[700],
+                          color: AppTheme.warningTextStrong,
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'Special Notes',
+                          'Notes',
                           style:
                               Theme.of(context).textTheme.titleSmall?.copyWith(
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.orange[700],
+                                    color: AppTheme.warningTextStrong,
                                   ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      child.specialNotes!,
-                      style: TextStyle(color: Colors.orange[700]),
+                      child.combinedNotes!,
+                      style: const TextStyle(color: AppTheme.warningTextStrong),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 3,
                     ),

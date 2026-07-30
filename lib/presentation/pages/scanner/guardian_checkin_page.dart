@@ -6,6 +6,10 @@ import 'dart:async';
 import '../../providers/checkin_provider.dart';
 import '../../providers/services_provider.dart';
 import '../../widgets/child_selection_card.dart';
+import '../../widgets/service_selector.dart';
+import '../../widgets/app_shell_header.dart';
+import '../../widgets/inline_error_banner.dart';
+import '../../widgets/motion.dart';
 import '../../../domain/entities/guardian.dart';
 import '../../../domain/entities/child.dart';
 import '../../../domain/entities/attendance_record.dart';
@@ -13,6 +17,7 @@ import '../../../domain/entities/service_session.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/services/printer_service.dart';
 import '../../../core/services/hardware_scanner_service.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/models/guardian_model.dart';
 import '../../../data/models/child_model.dart';
 
@@ -24,28 +29,39 @@ class GuardianCheckinPage extends StatefulWidget {
 }
 
 class _GuardianCheckinPageState extends State<GuardianCheckinPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   Guardian? _scannedGuardian;
   List<Child> _linkedChildren = [];
   List<String> _selectedChildIds = [];
   bool _isLoading = false;
   bool _isScanning = false;
   bool _isPrinting = false;
+  bool _showSuccess = false;
+  List<AttendanceRecord> _checkInResults = [];
   String? _error;
-  String? _successMessage;
   String? _selectedServiceId;
   Timer? _connectionCheckTimer;
+  Timer? _resetTimer;
+  int _resetInSeconds = 0;
 
   // Hardware barcode scanner (M7710) support
   late final FocusNode _scannerFocusNode;
   StreamSubscription<String>? _scannerSubscription;
-  bool _hwScannerActive = true;
+  final bool _hwScannerActive = true;
+
+  // Idle-scan sweep-line animation
+  late final AnimationController _sweepController;
 
   @override
   void initState() {
     super.initState();
-    _loadServices();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadServices());
     WidgetsBinding.instance.addObserver(this);
+
+    _sweepController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
 
     _scannerFocusNode = FocusNode(debugLabel: 'hardwareScanner');
 
@@ -68,8 +84,10 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
   @override
   void dispose() {
     _connectionCheckTimer?.cancel();
+    _resetTimer?.cancel();
     _scannerSubscription?.cancel();
     _scannerFocusNode.dispose();
+    _sweepController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -103,17 +121,12 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
   /// Check printer connection status and update UI accordingly
   void _checkPrinterConnection() async {
     try {
-      // Get the printer service and check connection status
       final printerService = context.read<PrinterService>();
-
-      // If we have a connected device, verify the connection is still active
       if (printerService.isConnected &&
           printerService.connectedDevice != null) {
         print('🔍 Checking printer connection status...');
         print('📱 Connected device: ${printerService.connectedDevice!.name}');
         print('🔗 Connection status: ${printerService.isConnected}');
-
-        // Force rebuild to update UI based on current connection status
         setState(() {});
       } else {
         print('🔍 No printer currently connected');
@@ -125,10 +138,18 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
     }
   }
 
-  /// Refresh printer connection status manually
-  void _refreshPrinterConnection() {
-    print('🔄 Manual printer connection refresh requested');
-    _checkPrinterConnection();
+  Future<void> _reconnectPrinter() async {
+    final printerService = context.read<PrinterService>();
+    final connected = await printerService.reconnect();
+    if (mounted) setState(() {});
+    if (!connected && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not reconnect to the last printer.'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
   }
 
   Future<void> _scanGuardianQR() async {
@@ -138,7 +159,6 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
     });
 
     try {
-      // Navigate to QR scanner
       final result = await context.push<String>(
         AppRouter.qrScanner,
         extra: {
@@ -163,59 +183,6 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
     }
   }
 
-  // RFID functionality temporarily disabled
-  // Future<void> _scanGuardianRFID() async {
-  //   setState(() {
-  //     _isScanning = true;
-  //     _error = null;
-  //   });
-  //
-  //   try {
-  //     // For now, show a dialog to enter RFID manually
-  //     // In production, this would use NFC scanning
-  //     final rfidCode = await _showRFIDInputDialog();
-  //     if (rfidCode != null) {
-  //       await _processGuardianRFID(rfidCode);
-  //     }
-  //   } catch (e) {
-  //     _setError('RFID scanning failed: $e');
-  //     }
-  //   } finally {
-  //     setState(() {
-  //       _isScanning = false;
-  //     });
-  //   }
-  // }
-
-  // RFID input dialog temporarily disabled
-  // Future<String?> _showRFIDInputDialog() async {
-  //   final controller = TextEditingController();
-  //   return showDialog<String>(
-  //     context: context,
-  //     builder: (context) => AlertDialog(
-  //       title: const Text('Enter RFID Code'),
-  //       content: TextField(
-  //         controller: controller,
-  //         decoration: const InputDecoration(
-  //           labelText: 'RFID Code',
-  //           hintText: 'Enter the RFID code from the guardian\'s tag',
-  //         ),
-  //         autofocus: true,
-  //       ),
-  //       actions: [
-  //         TextButton(
-  //           onPressed: () => Navigator.pop(context),
-  //           child: const Text('Cancel'),
-  //         ),
-  //         ElevatedButton(
-  //           onPressed: () => Navigator.pop(context, controller.text.trim()),
-  //           child: const Text('Submit'),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
-
   Future<void> _processGuardianQR(String qrCode) async {
     setState(() {
       _isLoading = true;
@@ -223,64 +190,21 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
     });
 
     try {
-      // Comprehensive logging of QR code data
-      print('🔍 ===== QR CODE SCANNED =====');
-      print('📱 Raw QR Data: "$qrCode"');
-      print('📊 Data Length: ${qrCode.length} characters');
-      print('📋 Data Type: ${_detectQRCodeType(qrCode)}');
-      print('🔤 Contains Letters: ${RegExp(r'[a-zA-Z]').hasMatch(qrCode)}');
-      print('🔢 Contains Numbers: ${RegExp(r'[0-9]').hasMatch(qrCode)}');
-      print(
-          '🔤 Contains Special Chars: ${RegExp(r'[^a-zA-Z0-9]').hasMatch(qrCode)}');
-      print(
-          '🌐 Is URL: ${qrCode.startsWith('http://') || qrCode.startsWith('https://')}');
-      print('📧 Is Email: ${qrCode.contains('@') && qrCode.contains('.')}');
-      print('📞 Is Phone: ${qrCode.startsWith('tel:')}');
-      print('🖼️ Is Image Data: ${qrCode.startsWith('data:image/')}');
-      print(
-          '🔑 Is Guardian ID: ${qrCode.startsWith('G') && qrCode.length > 10}');
-      print(
-          '🗄️ Is MongoDB ID: ${qrCode.length == 24 && RegExp(r'^[a-fA-F0-9]+$').hasMatch(qrCode)}');
-      print(
-          '📝 First 10 chars: "${qrCode.length > 10 ? '${qrCode.substring(0, 10)}...' : qrCode}"');
-      print(
-          '📝 Last 10 chars: "${qrCode.length > 10 ? '...${qrCode.substring(qrCode.length - 10)}' : qrCode}"');
-      print('🔍 ===========================');
-
       final checkinProvider = context.read<CheckinProvider>();
-      print('🔍 Searching for guardian with QR code...');
 
       // Check if QR code is a MongoDB ObjectId (guardian _id)
       if (qrCode.length == 24 && RegExp(r'^[a-fA-F0-9]+$').hasMatch(qrCode)) {
-        print(
-            '🔍 QR code appears to be a MongoDB ObjectId - searching for guardian by ID...');
-        // Search for guardian by ID directly
         final guardian = await checkinProvider.getGuardianById(qrCode);
-
         if (guardian != null) {
-          print(
-              '✅ Guardian found by ID: ${guardian.fullName} (ID: ${guardian.id})');
-          print(
-              '📱 Guardian details: ${guardian.contactNumber}, ${guardian.email}');
-          print('👥 Linked children count: ${guardian.linkedChildren.length}');
-
           await _fetchGuardianWithChildren(qrCode);
         } else {
-          print('❌ Guardian not found with ID: "$qrCode"');
           _setError('Guardian not found with this ID');
         }
       } else {
         final guardian = await checkinProvider.getGuardianByQrCode(qrCode);
-
         if (guardian != null) {
-          print('✅ Guardian found: ${guardian.fullName} (ID: ${guardian.id})');
-          print(
-              '📱 Guardian details: ${guardian.contactNumber}, ${guardian.email}');
-          print('👥 Linked children count: ${guardian.linkedChildren.length}');
-
           await _fetchGuardianWithChildren(guardian.id);
         } else {
-          print('❌ Guardian not found with QR code: "$qrCode"');
           _setError('Guardian not found with this QR code');
         }
       }
@@ -294,31 +218,6 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
     }
   }
 
-  // RFID processing temporarily disabled
-  // Future<void> _processGuardianRFID(String rfidCode) async {
-  //   setState(() {
-  //     _isLoading = true;
-  //     _error = null;
-  //   });
-  //
-  //   try {
-  //     final checkinProvider = context.read<CheckinProvider>();
-  //     final guardian = await checkinProvider.getGuardianByRfidTag(rfidCode);
-  //
-  //     if (guardian != null) {
-  //       await _fetchGuardianWithChildren(guardian.id);
-  //       } else {
-  //         _setError('Guardian not found with this RFID code');
-  //       }
-  //     } catch (e) {
-  //       _setError('Failed to process guardian RFID code: $e');
-  //     } finally {
-  //       setState(() {
-  //         _isLoading = false;
-  //       });
-  //     }
-  //   }
-
   Future<void> _fetchGuardianWithChildren(String guardianId) async {
     try {
       final checkinProvider = context.read<CheckinProvider>();
@@ -326,12 +225,10 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
 
       if (result != null) {
         try {
-          // Parse guardian data using GuardianModel
           final guardianData = result['guardian'] as Map<String, dynamic>;
           final guardianModel = GuardianModel.fromJson(guardianData);
           final guardian = guardianModel.toEntity();
 
-          // Parse children data using ChildModel
           final childrenData = result['children'] as List<dynamic>;
           final children = childrenData.map((childJson) {
             final childModel =
@@ -345,10 +242,6 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
             _selectedChildIds = [];
             _error = null;
           });
-
-          print('✅ Guardian and children parsed successfully');
-          print('👤 Guardian: ${guardian.fullName}');
-          print('👶 Children: ${children.length} children loaded');
         } catch (parseError) {
           print('💥 Error parsing guardian/children data: $parseError');
           _setError('Failed to parse guardian information: $parseError');
@@ -368,6 +261,17 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
       } else {
         _selectedChildIds.add(childId);
       }
+    });
+  }
+
+  void _toggleSelectAll() {
+    final selectableIds = _linkedChildren
+        .where((c) => !c.currentlyCheckedIn)
+        .map((c) => c.id)
+        .toList();
+    setState(() {
+      _selectedChildIds =
+          _selectedChildIds.length == selectableIds.length ? [] : selectableIds;
     });
   }
 
@@ -395,47 +299,17 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
         childIds: _selectedChildIds,
       );
 
-      // Create a detailed success message with pickup codes
-      final pickupCodes =
-          attendanceRecords.map((record) => record.pickupCode).join(', ');
-      final childNames = attendanceRecords.map((record) {
-        final child = _linkedChildren.firstWhere(
-          (c) => c.id == record.childId,
-          orElse: () => Child(
-            id: record.childId,
-            fullName: 'Unknown Child',
-            dateOfBirth: DateTime.now(),
-            gender: 'unknown',
-            ageGroup: 'unknown',
-            guardianIds: const [],
-            isActive: true,
-            currentlyCheckedIn: false,
-          ),
-        );
-        return '${child.firstName} ${child.lastName}';
-      }).join(', ');
-
       setState(() {
-        _successMessage =
-            '✅ Successfully checked in ${attendanceRecords.length} child(ren)\n'
-            '👶 Children: $childNames\n'
-            '🎫 Pickup Codes: $pickupCodes';
+        _checkInResults = attendanceRecords;
         _selectedChildIds = [];
       });
 
-      // Print stickers for each child
       await _printStickers(attendanceRecords);
 
-      // Clear the form after successful check-in
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) {
-          setState(() {
-            _scannedGuardian = null;
-            _linkedChildren = [];
-            _successMessage = null;
-          });
-        }
-      });
+      if (mounted) {
+        setState(() => _showSuccess = true);
+        _startResetCountdown(5);
+      }
     } catch (e) {
       final msg = e.toString().replaceAll(RegExp(r'^Exception:\s*'), '');
       _setError(msg);
@@ -447,34 +321,23 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
   }
 
   Future<void> _printStickers(List<AttendanceRecord> records) async {
-    print('��️ Starting to print sticker for ${records.length} children');
-
     setState(() {
       _isPrinting = true;
     });
 
     try {
-      // Get the printer service
       final printerService = context.read<PrinterService>();
 
-      // Check if printer is connected
       if (!printerService.isConnected) {
-        print('⚠️ Printer not connected. Checking for saved connection...');
-
-        // Try to reconnect using saved printer (Bluetooth or USB)
-        print('🔄 Attempting to reconnect to saved printer...');
         final connected = await printerService.reconnect();
-        if (connected) {
-          print('✅ Successfully reconnected to saved printer');
-        } else {
-          print('❌ Failed to reconnect to saved printer');
+        if (!connected) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
+              const SnackBar(
                 content: Text(
-                    '⚠️ Failed to reconnect to printer. Please check printer connection in Settings.'),
-                backgroundColor: Colors.orange,
-                duration: const Duration(seconds: 5),
+                    'Failed to reconnect to printer. Please check printer connection in Settings.'),
+                backgroundColor: AppTheme.warningTextStrong,
+                duration: Duration(seconds: 5),
               ),
             );
           }
@@ -482,7 +345,6 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
         }
       }
 
-      // Get service name
       final servicesProvider = context.read<ServicesProvider>();
       final service = servicesProvider.services.firstWhere(
         (s) => s.id == records.first.serviceId,
@@ -502,73 +364,36 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
         ),
       );
 
-      // Prepare data for printing
-      final matchedChildren = records.map((record) {
-        return _linkedChildren.firstWhere(
-          (c) => c.id == record.childId,
-          orElse: () => Child(
-            id: record.childId,
-            fullName: 'Unknown Child',
-            dateOfBirth: DateTime.now(),
-            gender: 'unknown',
-            ageGroup: 'unknown',
-            guardianIds: const [],
-            isActive: true,
-            currentlyCheckedIn: false,
-          ),
-        );
-      }).toList();
-
+      final matchedChildren =
+          records.map((record) => _matchChild(record.childId)).toList();
       final childrenNames = matchedChildren.map((c) => c.fullName).toList();
       final ageGroups = matchedChildren.map((c) => c.ageGroup).toList();
+      final specialNotes = matchedChildren.map((c) => c.combinedNotes).toList();
       final pickupCodes = records.map((record) => record.pickupCode).toList();
       final childIds = records.map((record) => record.childId).toList();
 
-      print('🎫 Printing stickers for ${childrenNames.length} children...');
-      print('   👶 Children: ${childrenNames.join(', ')}');
-      print('   📍 Pickup Codes: ${pickupCodes.join(', ')}');
-      print('   👤 Guardian: ${_scannedGuardian?.fullName}');
-      print('   ⛪ Service: ${service.name}');
-      print('   🕐 Check-in Time: ${records.first.checkInTime}');
-
-      // Print name tags (1 per child) + pickup slip (1 total)
       final success = await printerService.printGuardianCheckInSticker(
         childIds: childIds,
         children: childrenNames,
         pickupCodes: pickupCodes,
         ageGroups: ageGroups,
+        specialNotes: specialNotes,
         guardianQrCode: _scannedGuardian?.id ?? 'Unknown',
+        guardianName: _scannedGuardian?.fullName ?? 'Guardian',
         serviceName: service.name,
         checkInTime: records.first.checkInTime,
       );
 
-      if (success) {
-        print('✅ Sticker printed successfully for all children');
-      } else {
+      if (!success) {
         print('❌ Failed to print sticker');
-      }
-
-      print('🎉 Sticker printing completed!');
-
-      // Show success message to user
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                '✅ Successfully printed sticker for ${records.length} child(ren)!'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
       }
     } catch (e) {
       print('💥 Error printing sticker: $e');
-      // Show error to user but don't fail the check-in process
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Warning: Sticker printing failed: $e'),
-            backgroundColor: Colors.orange,
+            backgroundColor: AppTheme.warningTextStrong,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -580,10 +405,41 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
     }
   }
 
+  Child _matchChild(String childId) {
+    return _linkedChildren.firstWhere(
+      (c) => c.id == childId,
+      orElse: () => Child(
+        id: childId,
+        fullName: 'Unknown Child',
+        dateOfBirth: DateTime.now(),
+        gender: 'unknown',
+        ageGroup: 'unknown',
+        guardianIds: const [],
+        isActive: true,
+        currentlyCheckedIn: false,
+      ),
+    );
+  }
+
+  void _startResetCountdown(int seconds) {
+    _resetTimer?.cancel();
+    setState(() => _resetInSeconds = seconds);
+    _resetTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      final next = _resetInSeconds - 1;
+      if (next <= 0) {
+        timer.cancel();
+        _resetForm();
+      } else {
+        setState(() => _resetInSeconds = next);
+      }
+    });
+  }
+
   void _setError(String error) {
     setState(() {
       _error = error;
-      _successMessage = null;
+      _showSuccess = false;
     });
   }
 
@@ -594,13 +450,15 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
   }
 
   void _resetForm() {
+    _resetTimer?.cancel();
     setState(() {
       _scannedGuardian = null;
       _linkedChildren = [];
       _selectedChildIds = [];
       _selectedServiceId = null;
+      _checkInResults = [];
+      _showSuccess = false;
       _error = null;
-      _successMessage = null;
     });
     // Re-grab focus so the hardware scanner keeps receiving input
     _scannerFocusNode.requestFocus();
@@ -614,8 +472,7 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
 
   @override
   Widget build(BuildContext context) {
-    final servicesProvider = context.watch<ServicesProvider>();
-    final services = servicesProvider.services;
+    final printerConnected = context.watch<PrinterService>().isConnected;
 
     return Focus(
       focusNode: _scannerFocusNode,
@@ -624,662 +481,548 @@ class _GuardianCheckinPageState extends State<GuardianCheckinPage>
       child: GestureDetector(
         onTap: () => _scannerFocusNode.requestFocus(),
         child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Guardian Check-In'),
-            actions: [
-              if (_scannedGuardian != null)
-                IconButton(
-                  onPressed: _resetForm,
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Start Over',
-                ),
+          backgroundColor: AppTheme.pageBackground,
+          body: Column(
+            children: [
+              AppShellHeader(
+                title: 'Check In',
+                subtitle: _scannedGuardian?.fullName ?? 'Guardian badge',
+                showBackButton: true,
+                onBack: () => context.pop(),
+                onSettings: () => context.push(AppRouter.settings),
+                printerConnected: printerConnected,
+              ),
+              Expanded(child: _buildBody(printerConnected)),
             ],
           ),
-          body: _buildBody(services),
         ),
       ),
     );
   }
 
-  Widget _buildBody(List services) {
-    if (_isLoading) {
+  Widget _buildBody(bool printerConnected) {
+    if (_isLoading && _scannedGuardian == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
     if (_scannedGuardian == null) {
-      return _buildScanSection();
+      if (!printerConnected) return _buildPrinterGate();
+      return _buildIdleScan();
     }
 
-    return _buildGuardianInfoSection();
+    if (_isPrinting) return _buildPrintingState();
+    if (_showSuccess) return _buildSuccessState();
+
+    return _buildGuardianLoaded();
   }
 
-  Widget _buildScanSection() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Printer Status Check
-          Consumer<PrinterService>(
-            builder: (context, printerService, child) {
-              if (!printerService.isConnected) {
-                return _buildPrinterNotConnectedCard(context);
-              }
-
-              // Show scan section only if printer is connected
-              return Column(
-                children: [
-                  _buildPrinterConnectedCard(printerService),
-                  const SizedBox(height: 24),
-                  _buildScanButtons(),
-                ],
-              );
-            },
-          ),
-
-          if (_error != null) ...[
-            const SizedBox(height: 16),
+  Widget _buildPrinterGate() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              width: 84,
+              height: 84,
               decoration: BoxDecoration(
-                color: Colors.red[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red[200]!),
+                color: AppTheme.warningBg,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppTheme.warningBorder, width: 2),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.error, color: Colors.red[700]),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _error!,
-                      style: TextStyle(color: Colors.red[700]),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _clearError,
-                    icon: const Icon(Icons.close),
-                    color: Colors.red[700],
-                  ),
-                ],
+              child: const Center(
+                child: Icon(Icons.print_disabled,
+                    size: 36, color: AppTheme.warningTextStrong),
               ),
             ),
+            const SizedBox(height: 24),
+            const Text(
+              'No printer connected',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+                color: AppTheme.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Every check-in must print a name tag and a pickup slip. Pair the station printer to continue.',
+              style: TextStyle(
+                  fontSize: 14.5, color: AppTheme.textTertiary, height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              alignment: WrapAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: () => context.push(AppRouter.settings),
+                  child: const Text('Open printer settings'),
+                ),
+                OutlinedButton(
+                  onPressed: _reconnectPrinter,
+                  child: const Text('Try last printer'),
+                ),
+              ],
+            ),
           ],
-        ],
+        ),
       ),
     );
   }
 
-  /// Build scan buttons section
-  Widget _buildScanButtons() {
-    return Column(
+  Widget _buildIdleScan() {
+    return Stack(
       children: [
-        // Hardware scanner status card
-        Card(
-          color: _hwScannerActive ? Colors.blue.shade50 : Colors.grey.shade100,
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
+        const Positioned(
+          left: 20,
+          bottom: 24,
+          child: HardwarePointer(label: 'Scanner', color: AppTheme.magenta),
+        ),
+        Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.scanner,
-                  size: 64,
-                  color: _hwScannerActive
-                      ? Theme.of(context).colorScheme.primary
-                      : Colors.grey,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Guardian Check-In',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _hwScannerActive
-                      ? 'Place a QR code or barcode under the scanner\nThe kiosk scanner is ready and listening'
-                      : 'Hardware scanner is inactive',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  textAlign: TextAlign.center,
-                ),
-                if (_hwScannerActive) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                Container(
+                  width: double.infinity,
+                  constraints:
+                      const BoxConstraints(maxWidth: 420, minHeight: 320),
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(28),
+                    border:
+                        Border.all(color: const Color(0xFFB9C6DC), width: 2),
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.hardEdge,
                     children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          color: Colors.green,
-                          shape: BoxShape.circle,
-                        ),
+                      AnimatedBuilder(
+                        animation: _sweepController,
+                        builder: (context, child) {
+                          return Align(
+                            alignment: Alignment(
+                                0, _sweepController.value * 1.8 - 0.9),
+                            child: Container(
+                              height: 3,
+                              margin:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    AppTheme.magenta.withValues(alpha: 0),
+                                    AppTheme.magenta,
+                                    AppTheme.magenta.withValues(alpha: 0),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Scanner Active',
-                        style: TextStyle(
-                          color: Colors.green.shade700,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ScanPulse(
+                            child: Container(
+                              width: 84,
+                              height: 84,
+                              decoration: BoxDecoration(
+                                color: AppTheme.textPrimary,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.qr_code,
+                                    color: Colors.white, size: 44),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Scan guardian QR',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _hwScannerActive
+                                ? 'Hold the badge under the scanner'
+                                : 'Hardware scanner is inactive',
+                            style: const TextStyle(
+                                fontSize: 13.5, color: AppTheme.textSecondary),
+                          ),
+                        ],
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 20),
+                OutlinedButton.icon(
+                  onPressed: _isScanning ? null : _scanGuardianQR,
+                  icon: const Icon(Icons.camera_alt, size: 18),
+                  label: const Text('Use camera instead'),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 20),
+                  InlineErrorBanner(message: _error!, onDismiss: _clearError),
                 ],
               ],
             ),
           ),
         ),
-        const SizedBox(height: 16),
-        // Fallback: camera-based QR scan button
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _isScanning ? null : _scanGuardianQR,
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Camera Scan (Fallback)'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
+      ],
+    );
+  }
+
+  Widget _buildPrintingState() {
+    return Stack(
+      children: [
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(
+                width: 48,
+                height: 48,
+                child: CircularProgressIndicator(
+                    strokeWidth: 4, color: AppTheme.navy),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Printing ${_checkInResults.length} name '
+                '${_checkInResults.length == 1 ? 'tag' : 'tags'} + slip',
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
                 ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: null,
-                icon: const Icon(Icons.credit_card),
-                label: const Text('RFID'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
-                  foregroundColor: Colors.grey.shade500,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
+        ),
+        const Positioned(
+          right: 20,
+          bottom: 24,
+          child: HardwarePointer(label: 'Printer', color: AppTheme.navy),
         ),
       ],
     );
   }
 
-  /// Build card showing printer is not connected
-  Widget _buildPrinterNotConnectedCard(BuildContext context) {
-    return Card(
-      color: Colors.orange.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Icon(
-              Icons.print_disabled,
-              size: 48,
-              color: Colors.orange.shade700,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Printer Not Connected',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.orange.shade800,
-                    fontWeight: FontWeight.bold,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'You need to connect a printer before you can check in guardians and print stickers.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.orange.shade700,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () => _navigateToSettings(),
-              icon: const Icon(Icons.settings),
-              label: const Text('Connect Printer'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange.shade600,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () => _showPrinterHelp(context),
-              child: Text(
-                'Need Help?',
-                style: TextStyle(
-                  color: Colors.orange.shade700,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Build card showing printer is connected
-  Widget _buildPrinterConnectedCard(PrinterService printerService) {
-    final connectedDevice = printerService.connectedDevice;
-    return Card(
-      color: Colors.green.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(
-              Icons.print,
-              color: Colors.green.shade600,
-              size: 32,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Printer Connected',
-                    style: TextStyle(
-                      color: Colors.green.shade800,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  if (connectedDevice?.name != null)
-                    Text(
-                      connectedDevice!.name,
-                      style: TextStyle(
-                        color: Colors.green.shade700,
-                        fontSize: 14,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            IconButton(
-              onPressed: () => _refreshPrinterConnection(),
-              icon: Icon(
-                Icons.refresh,
-                color: Colors.green.shade600,
-              ),
-              tooltip: 'Refresh Connection Status',
-            ),
-            IconButton(
-              onPressed: () => _navigateToSettings(),
-              icon: Icon(
-                Icons.settings,
-                color: Colors.green.shade600,
-              ),
-              tooltip: 'Printer Settings',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Navigate to settings page to manage printer
-  void _navigateToSettings() {
-    context.push('/settings');
-  }
-
-  /// Show printer help information
-  void _showPrinterHelp(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.help_outline, color: Colors.orange.shade600),
-            const SizedBox(width: 8),
-            const Text('Kiosk Setup Help'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Printer (REGO M90 / 80mm):',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            const Text('1. Go to Settings > Printer Setup'),
-            const Text('2. Tap USB and select the thermal printer'),
-            const Text('3. Wait for connection confirmation'),
-            const SizedBox(height: 16),
-            Text(
-              'Scanner (M7710):',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            const Text('• The embedded barcode scanner is always active'),
-            const Text('• Supports QR codes, Code128, EAN-13, and more'),
-            const Text('• Place a barcode/QR under the scanner window'),
-            const Text('• Camera scan is available as a fallback'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _navigateToSettings();
-            },
-            child: const Text('Go to Settings'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGuardianInfoSection() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _buildSuccessState() {
+    return Container(
+      color: AppTheme.successBg,
+      child: Stack(
         children: [
-          // Guardian Information Card
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        child: Text(
-                          _scannedGuardian!.firstName[0] +
-                              _scannedGuardian!.lastName[0],
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+          Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: RiseIn(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 62,
+                          height: 62,
+                          decoration: const BoxDecoration(
+                            color: AppTheme.green,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.check,
+                              color: Colors.white, size: 32),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Checked in',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _scannedGuardian!.fullName,
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            Text(
-                              _scannedGuardian!.relationship,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                            Text(
-                              _scannedGuardian!.contactNumber,
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
+                        const SizedBox(height: 6),
+                        Text(
+                          'Hand the pickup slip to ${_scannedGuardian?.fullName ?? 'the guardian'}',
+                          style: const TextStyle(
+                              fontSize: 14.5, color: AppTheme.successText),
+                          textAlign: TextAlign.center,
                         ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Service Selection
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Select Service',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: _selectedServiceId,
-                    decoration: const InputDecoration(
-                      labelText: 'Service',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('Select a service...'),
-                      ),
-                      ...context
-                          .watch<ServicesProvider>()
-                          .services
-                          .map((service) {
-                        return DropdownMenuItem(
-                          value: service.id,
-                          child: Text(service.name),
-                        );
-                      }),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedServiceId = value;
-                      });
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Children Selection
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Select Children to Check In',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Text(
-                        '${_selectedChildIds.length}/${_linkedChildren.length} selected',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (_linkedChildren.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Text(
-                        'No children linked to this guardian',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontStyle: FontStyle.italic),
-                      ),
-                    )
-                  else
-                    ..._linkedChildren.map((child) => ChildSelectionCard(
-                          child: child,
-                          isSelected: _selectedChildIds.contains(child.id),
-                          onSelectionChanged: () =>
-                              _toggleChildSelection(child.id),
-                        )),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Check-in Button
-          ElevatedButton(
-            onPressed:
-                _selectedChildIds.isNotEmpty && _selectedServiceId != null
-                    ? _checkInSelectedChildren
-                    : null,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.all(16),
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
-            ),
-            child: Text(
-              'Check In ${_selectedChildIds.length} Child(ren)',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-
-          if (_successMessage != null) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green[200]!),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.green[700]),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _successMessage!,
-                      style: TextStyle(color: Colors.green[700]),
+                        const SizedBox(height: 20),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: Column(
+                            children: _checkInResults.map((record) {
+                              final child = _matchChild(record.childId);
+                              final badge =
+                                  AppTheme.ageGroupBadge(child.ageGroup);
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surface,
+                                  borderRadius: BorderRadius.circular(
+                                      AppTheme.radiusButton),
+                                  border:
+                                      Border.all(color: AppTheme.successBorder),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 4,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: badge.fg,
+                                        borderRadius: BorderRadius.circular(
+                                            AppTheme.radiusPill),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        child.fullName,
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    Text(record.pickupCode,
+                                        style: AppTheme.mono(fontSize: 15)),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-
-            // Printing status indicator
-            if (_isPrinting) ...[
-              const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue[200]!),
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: AppTheme.surface,
+                  border:
+                      Border(top: BorderSide(color: AppTheme.successBorder)),
                 ),
                 child: Row(
                   children: [
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(Colors.blue[700]!),
-                      ),
+                    OutlinedButton(
+                      onPressed: () => _printStickers(_checkInResults),
+                      child: const Text('Reprint'),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        '🖨️ Printing stickers... Please wait',
-                        style: TextStyle(
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.w500,
-                        ),
+                      child: ElevatedButton(
+                        onPressed: _resetForm,
+                        child: Text('Next family · ${_resetInSeconds}s'),
                       ),
                     ),
                   ],
                 ),
               ),
             ],
-          ],
-
-          if (_error != null) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red[200]!),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.error, color: Colors.red[700]),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _error!,
-                      style: TextStyle(color: Colors.red[700]),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _clearError,
-                    icon: const Icon(Icons.close),
-                    color: Colors.red[700],
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
+          const Positioned(
+            right: 20,
+            bottom: 96,
+            child: HardwarePointer(
+                label: 'Tags + slip here', color: AppTheme.navy),
+          ),
         ],
       ),
     );
   }
 
-  // Helper methods to detect QR/RFID code types
-  String _detectQRCodeType(String code) {
-    if (code.startsWith('http://') || code.startsWith('https://')) {
-      return 'URL';
-    } else if (code.startsWith('data:image/')) {
-      return 'Image Data';
-    } else if (code.contains('@') &&
-        code.contains('.') &&
-        !code.startsWith('http://') &&
-        !code.startsWith('https://')) {
-      return 'Email';
-    } else if (code.startsWith('tel:')) {
-      return 'Phone Number';
-    } else if (code.startsWith('G') && code.length > 10) {
-      return 'Guardian ID (likely)';
-    } else if (code.length == 24 && RegExp(r'^[a-fA-F0-9]+$').hasMatch(code)) {
-      return 'MongoDB ObjectId (likely)';
-    } else if (code.length > 20) {
-      return 'Long Text/Data';
-    } else {
-      return 'Short Text/Code';
-    }
-  }
+  Widget _buildGuardianLoaded() {
+    final selectableCount =
+        _linkedChildren.where((c) => !c.currentlyCheckedIn).length;
+    final nSel = _selectedChildIds.length;
 
-  // RFID detection helper temporarily disabled
-  // String _detectRFIDCodeType(String code) {
-  //   if (code.startsWith('RFID')) {
-  //     return 'RFID Tag Format';
-  //   } else if (code.length == 8 &&
-  //       RegExp(r'^[0-9A-F]+$', caseSensitive: false).hasMatch(code)) {
-  //     return '8-digit Hex RFID';
-  //   } else if (code.length == 10 && RegExp(r'^[0-9]+$').hasMatch(code)) {
-  //     return '10-digit Numeric RFID';
-  //   } else if (code.length == 12 && RegExp(r'^[0-9]+$').hasMatch(code)) {
-  //     return '12-digit Numeric RFID';
-  //   } else if (RegExp(r'^[0-9A-F]+$', caseSensitive: false).hasMatch(code)) {
-  //     return 'Hex RFID';
-  //   } else if (RegExp(r'^[0-9]+$').hasMatch(code)) {
-  //     return 'Numeric RFID';
-  //   } else {
-  //     return 'Custom Format';
-  //   }
-  // }
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: RiseIn(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius:
+                          BorderRadius.circular(AppTheme.radiusCardLarge),
+                      border: Border.all(color: AppTheme.hairline),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 26,
+                          backgroundColor: AppTheme.navy,
+                          child: Text(
+                            _scannedGuardian!.firstName.isNotEmpty
+                                ? _scannedGuardian!.firstName[0] +
+                                    (_scannedGuardian!.lastName.isNotEmpty
+                                        ? _scannedGuardian!.lastName[0]
+                                        : '')
+                                : '?',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _scannedGuardian!.fullName,
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                              Text(
+                                '${_scannedGuardian!.relationship} · ${_scannedGuardian!.contactNumber}',
+                                style: const TextStyle(
+                                    fontSize: 12.5,
+                                    color: AppTheme.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.pageBackground,
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusPill),
+                          ),
+                          child: Text(
+                            _scannedGuardian!.guardianId,
+                            style: AppTheme.mono(
+                                fontSize: 12.5, color: AppTheme.textTertiary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  ServiceSelector(
+                    selectedServiceId: _selectedServiceId,
+                    onServiceSelected: (value) {
+                      setState(() => _selectedServiceId = value);
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'CHILDREN',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.1,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                      if (selectableCount > 0)
+                        TextButton(
+                          onPressed: _toggleSelectAll,
+                          child: Text(
+                            nSel == selectableCount
+                                ? 'Clear all'
+                                : 'Select all',
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  if (_linkedChildren.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Text(
+                        'No children linked to this guardian',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontStyle: FontStyle.italic,
+                            color: AppTheme.textSecondary),
+                      ),
+                    )
+                  else
+                    ..._linkedChildren.map((child) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: ChildSelectionCard(
+                            child: child,
+                            isSelected: _selectedChildIds.contains(child.id),
+                            onSelectionChanged: () =>
+                                _toggleChildSelection(child.id),
+                          ),
+                        )),
+                  if (_error != null) ...[
+                    const SizedBox(height: 16),
+                    InlineErrorBanner(message: _error!, onDismiss: _clearError),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: const BoxDecoration(
+            color: AppTheme.surface,
+            border: Border(top: BorderSide(color: AppTheme.hairline)),
+          ),
+          child: Row(
+            children: [
+              OutlinedButton(
+                onPressed: _resetForm,
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: nSel > 0 && _selectedServiceId != null
+                      ? _checkInSelectedChildren
+                      : null,
+                  child: Text(
+                    nSel > 0
+                        ? 'Check in $nSel ${nSel > 1 ? 'children' : 'child'}'
+                        : 'Select a child',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

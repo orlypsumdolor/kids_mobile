@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../domain/entities/child.dart';
+import '../../core/theme/app_theme.dart';
 
 class ChildSelectionCard extends StatelessWidget {
   final Child child;
@@ -15,113 +16,144 @@ class ChildSelectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: isSelected ? Theme.of(context).colorScheme.primaryContainer : null,
-      child: InkWell(
-        onTap: onSelectionChanged,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Row(
-            children: [
-              // Checkbox
-              Checkbox(
-                value: isSelected,
-                onChanged: (_) => onSelectionChanged(),
-                activeColor: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 12),
+    final alreadyIn = child.currentlyCheckedIn;
+    final badge = AppTheme.ageGroupBadge(child.ageGroup);
+    final border = isSelected ? AppTheme.navy : AppTheme.hairline;
+    final bg = isSelected ? const Color(0xFFF2F6FD) : AppTheme.surface;
 
-              // Child Avatar
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Theme.of(context).colorScheme.secondary,
-                child: Text(
-                  child.firstName[0] + child.lastName[0],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+    return Opacity(
+      opacity: alreadyIn ? 0.55 : 1,
+      child: Material(
+        color: bg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        child: InkWell(
+          onTap: onSelectionChanged,
+          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 84),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+              border: Border.all(color: border, width: 2),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: isSelected ? AppTheme.navy : Colors.transparent,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(
+                      color: isSelected ? AppTheme.navy : const Color(0xFFC9D0DA),
+                      width: 2,
+                    ),
                   ),
+                  child: isSelected
+                      ? const Icon(Icons.check, color: Colors.white, size: 18)
+                      : null,
                 ),
-              ),
-              const SizedBox(width: 12),
-
-              // Child Information
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      child.fullName,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.person_outline,
-                          size: 14,
-                          color: Colors.grey[600],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        child.fullName,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.1,
+                          color: AppTheme.textPrimary,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${child.ageInYears} years old',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(width: 16),
-                        Icon(
-                          Icons.category_outlined,
-                          size: 14,
-                          color: Colors.grey[600],
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          child.ageGroup,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                    if (child.hasSpecialNotes) ...[
+                      ),
                       const SizedBox(height: 4),
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
                         children: [
-                          Icon(
-                            Icons.info_outline,
-                            size: 14,
-                            color: Colors.orange[600],
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: badge.bg,
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusPill),
+                            ),
                             child: Text(
-                              'Has special notes',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: Colors.orange[600],
-                                  ),
+                              child.ageGroup.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.4,
+                                color: badge.fg,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${child.ageInYears} yrs',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: AppTheme.textSecondary,
                             ),
                           ),
                         ],
                       ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-
-              // Selection indicator
-              if (isSelected)
-                Icon(
-                  Icons.check_circle,
-                  color: Theme.of(context).colorScheme.primary,
-                  size: 24,
-                ),
-            ],
+                if (alreadyIn)
+                  const _FlagPill(
+                    label: 'Already in',
+                    bg: AppTheme.chipNeutralBg,
+                    fg: AppTheme.textTertiary,
+                    border: AppTheme.inputBorder,
+                  )
+                else if (child.hasNotes)
+                  const _FlagPill(
+                    label: 'Note',
+                    bg: AppTheme.warningBg,
+                    fg: AppTheme.warningText,
+                    border: AppTheme.warningBorder,
+                  ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _FlagPill extends StatelessWidget {
+  final String label;
+  final Color bg;
+  final Color fg;
+  final Color border;
+
+  const _FlagPill({
+    required this.label,
+    required this.bg,
+    required this.fg,
+    required this.border,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+        border: Border.all(color: border),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: fg),
       ),
     );
   }

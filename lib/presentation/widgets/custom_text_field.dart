@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
+
 class CustomTextField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -44,42 +46,35 @@ class CustomTextField extends StatelessWidget {
       enabled: enabled,
       maxLines: maxLines,
       maxLength: maxLength,
+      style: const TextStyle(fontSize: 15, color: AppTheme.textPrimary),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
+        labelStyle: const TextStyle(color: AppTheme.textSecondary),
         prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
         suffixIcon: suffixIcon,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppTheme.radiusButton),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(
-            color: Colors.grey[300]!,
-          ),
+          borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+          borderSide: const BorderSide(color: AppTheme.inputBorder, width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(
-            color: Theme.of(context).colorScheme.primary,
-            width: 2,
-          ),
+          borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+          borderSide: const BorderSide(color: AppTheme.navy, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(
-            color: Theme.of(context).colorScheme.error,
-          ),
+          borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+          borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(
-            color: Theme.of(context).colorScheme.error,
-            width: 2,
-          ),
+          borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+          borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
         ),
         filled: true,
-        fillColor: enabled ? Colors.white : Colors.grey[100],
+        fillColor: enabled ? AppTheme.surface : AppTheme.chipNeutralBg,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       ),
     );
   }

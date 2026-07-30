@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../../core/router/app_router.dart';
+import '../../core/theme/app_theme.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -38,47 +39,114 @@ class _SplashPageState extends State<SplashPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment(0, -1),
+            end: Alignment(0.35, 1),
+            colors: [Color(0xFF0E3D8C), Color(0xFF072456)],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                'assets/images/kids_church_logo.png',
+                width: 140,
+                fit: BoxFit.contain,
               ),
-              child: const Icon(
-                Icons.qr_code_scanner,
-                size: 60,
-                color: Color(0xFF2563EB),
+              const SizedBox(height: 28),
+              const Text(
+                'VICTORY',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: 4,
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Check-in App',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+              const SizedBox(height: 6),
+              const Text(
+                'Kids Church Check-In',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF8FB0E4),
+                  letterSpacing: 0.5,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Secure child check-in system',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Colors.white70,
-              ),
-            ),
-            const SizedBox(height: 48),
-            const CircularProgressIndicator(
-              color: Colors.white,
-              strokeWidth: 2,
-            ),
-          ],
+              const SizedBox(height: 32),
+              const _BlinkingDots(),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _BlinkingDots extends StatefulWidget {
+  const _BlinkingDots();
+
+  @override
+  State<_BlinkingDots> createState() => _BlinkingDotsState();
+}
+
+class _BlinkingDotsState extends State<_BlinkingDots>
+    with TickerProviderStateMixin {
+  static const _colors = [AppTheme.magenta, AppTheme.yellow, AppTheme.green];
+  late final List<AnimationController> _controllers;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = List.generate(3, (i) {
+      final controller = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 1100),
+      );
+      Future.delayed(Duration(milliseconds: i * 200), () {
+        if (mounted) controller.repeat(reverse: true);
+      });
+      return controller;
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < 3; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: FadeTransition(
+              opacity: Tween<double>(begin: 1, end: 0.2).animate(
+                CurvedAnimation(
+                  parent: _controllers[i],
+                  curve: Curves.easeInOut,
+                ),
+              ),
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: _colors[i],
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

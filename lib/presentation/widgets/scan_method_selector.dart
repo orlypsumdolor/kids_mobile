@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 
 class ScanMethodSelector extends StatelessWidget {
   final VoidCallback onQRScan;
@@ -18,35 +19,26 @@ class ScanMethodSelector extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Choose Scan Method',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
             ),
             const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: onQRScan,
-                    icon: const Icon(Icons.qr_code_scanner),
+                    icon: const Icon(Icons.qr_code_scanner, color: AppTheme.navy),
                     label: const Text('QR Code'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: onRFIDScan,
-                    icon: const Icon(Icons.nfc),
+                    icon: const Icon(Icons.nfc, color: AppTheme.textSecondary),
                     label: const Text('RFID Tag'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: Theme.of(context).colorScheme.secondary,
-                    ),
                   ),
                 ),
               ],

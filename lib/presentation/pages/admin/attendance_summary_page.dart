@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../providers/auth_provider.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import '../../widgets/app_shell_header.dart';
+import '../../../core/router/app_router.dart';
+import '../../../core/services/printer_service.dart';
+import '../../../core/theme/app_theme.dart';
 
 class AttendanceSummaryPage extends StatefulWidget {
   const AttendanceSummaryPage({super.key});
@@ -60,119 +65,130 @@ class _AttendanceSummaryPageState extends State<AttendanceSummaryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final printerConnected = context.watch<PrinterService>().isConnected;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Attendance Summary'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.calendar_today),
-            onPressed: _selectDate,
+      backgroundColor: AppTheme.pageBackground,
+      body: Column(
+        children: [
+          AppShellHeader(
+            title: 'Attendance',
+            subtitle: _formatDate(selectedDate),
+            showBackButton: true,
+            onBack: () => context.pop(),
+            onSettings: () => context.push(AppRouter.settings),
+            printerConnected: printerConnected,
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Date and Stats Header
-            Container(
-              padding: const EdgeInsets.all(16),
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+          Expanded(
+            child: SafeArea(
+              top: false,
               child: Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _formatDate(selectedDate),
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                      TextButton.icon(
-                        onPressed: _selectDate,
-                        icon: const Icon(Icons.edit_calendar),
-                        label: const Text('Change Date'),
-                      ),
-                    ],
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Row(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _selectDate,
+                          icon: const Icon(Icons.edit_calendar, size: 18),
+                          label: const Text('Change date'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _StatCard(
+                            title: 'Total Check-ins',
+                            value: '${attendanceData.length}',
+                            color: AppTheme.navy,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _StatCard(
+                            title: 'Still Here',
+                            value:
+                                '${attendanceData.where((a) => a['status'] == 'Checked In').length}',
+                            color: AppTheme.green,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _StatCard(
+                            title: 'Completed',
+                            value:
+                                '${attendanceData.where((a) => a['status'] == 'Completed').length}',
+                            color: AppTheme.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: _SampleDataBanner(),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Attendance List
+                  Expanded(
+                    child: isLoading
+                        ? const Center(child: CircularProgressIndicator(color: AppTheme.navy))
+                        : attendanceData.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.event_busy,
+                                      size: 64,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    const Text(
+                                      'No attendance records',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                    Text(
+                                      'for ${_formatDate(selectedDate)}',
+                                      style: const TextStyle(color: AppTheme.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surface,
+                                  borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                                  border: Border.all(color: AppTheme.hairline),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: ListView.separated(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: attendanceData.length,
+                                  separatorBuilder: (_, __) =>
+                                      const Divider(height: 1, color: AppTheme.hairline),
+                                  itemBuilder: (context, index) {
+                                    return _AttendanceRow(record: attendanceData[index], index: index);
+                                  },
+                                ),
+                              ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Total Check-ins',
-                          value: '${attendanceData.length}',
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Still Here',
-                          value:
-                              '${attendanceData.where((a) => a['status'] == 'Checked In').length}',
-                          color: Theme.of(context).colorScheme.secondary,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Completed',
-                          value:
-                              '${attendanceData.where((a) => a['status'] == 'Completed').length}',
-                          color: Theme.of(context).colorScheme.tertiary,
-                        ),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),
-
-            // Attendance List
-            Expanded(
-              child: isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : attendanceData.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.event_busy,
-                                size: 64,
-                                color: Colors.grey[400],
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No attendance records',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              Text(
-                                'for ${_formatDate(selectedDate)}',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      color: Colors.grey[600],
-                                    ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: attendanceData.length,
-                          itemBuilder: (context, index) {
-                            final record = attendanceData[index];
-                            return _AttendanceCard(record: record);
-                          },
-                        ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -208,6 +224,50 @@ class _AttendanceSummaryPageState extends State<AttendanceSummaryPage> {
   }
 }
 
+class _SampleDataBanner extends StatelessWidget {
+  const _SampleDataBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.warningBg,
+        borderRadius: BorderRadius.circular(AppTheme.radiusButton),
+        border: Border.all(color: AppTheme.warningBorder, width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF6E3B8),
+              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+            ),
+            child: const Text(
+              'GAP §8.1',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+                color: AppTheme.warningText,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              "Designed against live data. Today this screen renders sample data — the reporting endpoints exist but aren't wired.",
+              style: TextStyle(fontSize: 12.5, color: Color(0xFF6B5220), height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
@@ -222,29 +282,32 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+        border: Border.all(color: AppTheme.hairline),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             value,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                ),
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: color,
+              height: 1.05,
+            ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             title,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w500,
-                ),
-            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: AppTheme.textSecondary,
+            ),
           ),
         ],
       ),
@@ -252,122 +315,65 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _AttendanceCard extends StatelessWidget {
+class _AttendanceRow extends StatelessWidget {
   final Map<String, dynamic> record;
+  final int index;
 
-  const _AttendanceCard({required this.record});
+  const _AttendanceRow({required this.record, required this.index});
 
   @override
   Widget build(BuildContext context) {
     final isCheckedIn = record['status'] == 'Checked In';
+    const barColors = [AppTheme.green, AppTheme.blue, AppTheme.yellow, AppTheme.magenta];
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 30,
+            decoration: BoxDecoration(
+              color: barColors[index % barColors.length],
+              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                CircleAvatar(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  radius: 20,
-                  child: Text(
-                    record['childName'][0],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                Text(
+                  record['childName'],
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        record['childName'],
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                      ),
-                      Text(
-                        'Guardian: ${record['guardianName']}',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey[600],
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isCheckedIn
-                        ? Theme.of(context)
-                            .colorScheme
-                            .secondary
-                            .withOpacity(0.1)
-                        : Theme.of(context)
-                            .colorScheme
-                            .tertiary
-                            .withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    record['status'],
-                    style: TextStyle(
-                      color: isCheckedIn
-                          ? Theme.of(context).colorScheme.secondary
-                          : Theme.of(context).colorScheme.tertiary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
+                Text(
+                  '${record['guardianName']} · In ${record['checkinTime']}'
+                  '${record['checkoutTime'] != null ? ' · Out ${record['checkoutTime']}' : ''}',
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  Icons.access_time,
-                  size: 16,
-                  color: Colors.grey[600],
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'In: ${record['checkinTime']}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                if (record['checkoutTime'] != null) ...[
-                  const SizedBox(width: 16),
-                  Icon(
-                    Icons.logout,
-                    size: 16,
-                    color: Colors.grey[600],
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Out: ${record['checkoutTime']}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-                const Spacer(),
-                Text(
-                  record['service'],
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                ),
-              ],
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: isCheckedIn ? const Color(0xFFE6F5EA) : AppTheme.chipNeutralBg,
+              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
             ),
-          ],
-        ),
+            child: Text(
+              isCheckedIn ? 'Here' : 'Out',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: isCheckedIn ? const Color(0xFF1F6E39) : AppTheme.textTertiary,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

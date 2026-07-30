@@ -60,13 +60,48 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  
+
   # Code Generation
   injectable_generator: ^2.4.1
   build_runner: ^2.4.7
-  
+
   # Linting
   flutter_lints: ^3.0.0
 
+  # App icon generation
+  flutter_launcher_icons: ^0.11.0
+
+flutter_icons:
+  android: true
+  image_path: "assets/images/app_icon.png"
+  adaptive_icon_background: "#0E3D8C"
+  adaptive_icon_foreground: "assets/images/app_icon_foreground.png"
+  min_sdk_android: 21
+
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/images/kids_church_logo.png
+    - assets/images/app_icon.png
+    - assets/images/app_icon_foreground.png
+
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins/Poppins-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Poppins/Poppins-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Poppins/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins/Poppins-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Poppins/Poppins-ExtraBold.ttf
+          weight: 800
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono/IBMPlexMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/IBMPlexMono/IBMPlexMono-SemiBold.ttf
+          weight: 600
