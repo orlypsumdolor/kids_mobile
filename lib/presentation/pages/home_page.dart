@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../providers/services_provider.dart';
+import '../providers/dashboard_provider.dart';
 import '../widgets/role_based_navigation.dart';
 import '../widgets/app_shell_header.dart';
 import '../../core/router/app_router.dart';
@@ -25,12 +26,17 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ServicesProvider>().loadServices();
+      context.read<DashboardProvider>().loadServiceStats();
     });
     // PrinterService isn't a ChangeNotifier and the active-service window
     // can start/end while sitting on this screen, so poll periodically —
-    // same pattern as the check-in page's printer-connection timer.
+    // same pattern as the check-in page's printer-connection timer. Also
+    // refreshes the "still here" / "today" counts on the now-serving card.
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        context.read<DashboardProvider>().loadServiceStats();
+        setState(() {});
+      }
     });
   }
 
@@ -111,48 +117,120 @@ class _HomePageState extends State<HomePage> {
 class _NowServingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Consumer<ServicesProvider>(
-      builder: (context, servicesProvider, child) {
+    return Consumer2<ServicesProvider, DashboardProvider>(
+      builder: (context, servicesProvider, dashboardProvider, child) {
         String activeServiceName = '—';
+        String? activeServiceId;
         for (final s in servicesProvider.services) {
           if (s.isCurrentlyActive) {
             activeServiceName = s.name;
+            activeServiceId = s.id;
             break;
           }
         }
 
+        final stat = activeServiceId != null
+            ? dashboardProvider.statsFor(activeServiceId)
+            : null;
+
         return Container(
+          width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: AppTheme.surface,
             borderRadius: BorderRadius.circular(AppTheme.radiusCardLarge),
             border: Border.all(color: AppTheme.hairline),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 20,
+            runSpacing: 16,
             children: [
-              const Text(
-                'Now serving',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textSecondary,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Now serving',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    activeServiceName,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                activeServiceName,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                  color: AppTheme.textPrimary,
+              if (stat != null)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _NowServingStat(
+                      value: stat.totalToday,
+                      label: 'Checked in',
+                      color: AppTheme.navy,
+                    ),
+                    const SizedBox(width: 28),
+                    _NowServingStat(
+                      value: stat.stillHere,
+                      label: 'Still here',
+                      color: AppTheme.green,
+                    ),
+                  ],
                 ),
-              ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _NowServingStat extends StatelessWidget {
+  final int value;
+  final String label;
+  final Color color;
+
+  const _NowServingStat({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$value',
+          style: TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.w700,
+            color: color,
+            height: 1.1,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w500,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+      ],
     );
   }
 }

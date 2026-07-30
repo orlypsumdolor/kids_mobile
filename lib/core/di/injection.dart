@@ -9,20 +9,24 @@ import '../../data/datasources/remote/api_service.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../data/repositories/checkin_repository_impl.dart';
 import '../../data/repositories/service_repository_impl.dart';
+import '../../data/repositories/dashboard_repository_impl.dart';
 
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/checkin_repository.dart';
 import '../../domain/repositories/service_repository.dart';
+import '../../domain/repositories/dashboard_repository.dart';
 
 import '../../domain/usecases/auth_usecases.dart';
 import '../../domain/usecases/checkin_usecases.dart';
 import '../../domain/usecases/checkout_usecases.dart';
 import '../../domain/usecases/service_usecases.dart';
+import '../../domain/usecases/dashboard_usecases.dart';
 
 import '../../presentation/providers/auth_provider.dart';
 import '../../presentation/providers/checkin_provider.dart';
 import '../../presentation/providers/checkout_provider.dart';
 import '../../presentation/providers/services_provider.dart';
+import '../../presentation/providers/dashboard_provider.dart';
 
 import '../../core/services/camera_service.dart';
 // import '../../core/services/nfc_service.dart'; // Temporarily disabled
@@ -67,6 +71,10 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<ServiceRepository>(() => ServiceRepositoryImpl(
         apiService: getIt(),
       ));
+  getIt.registerLazySingleton<DashboardRepository>(
+      () => DashboardRepositoryImpl(
+            apiService: getIt(),
+          ));
 
   // Use cases
   getIt.registerLazySingleton<LoginUseCase>(() => LoginUseCase(getIt()));
@@ -90,6 +98,8 @@ Future<void> configureDependencies() async {
       () => GetServiceSessionsUseCase(getIt()));
   getIt.registerLazySingleton<GetServiceSessionByIdUseCase>(
       () => GetServiceSessionByIdUseCase(getIt()));
+  getIt.registerLazySingleton<GetServiceStatsUseCase>(
+      () => GetServiceStatsUseCase(getIt()));
 
   // Providers
   getIt.registerFactory<AuthProvider>(() => AuthProvider(
@@ -114,5 +124,8 @@ Future<void> configureDependencies() async {
       ));
   getIt.registerFactory<ServicesProvider>(() => ServicesProvider(
         getServiceSessionsUseCase: getIt(),
+      ));
+  getIt.registerFactory<DashboardProvider>(() => DashboardProvider(
+        getServiceStatsUseCase: getIt(),
       ));
 }
