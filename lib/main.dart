@@ -12,6 +12,7 @@ import 'presentation/providers/checkin_provider.dart';
 import 'presentation/providers/checkout_provider.dart';
 import 'presentation/providers/services_provider.dart';
 import 'presentation/providers/dashboard_provider.dart';
+import 'presentation/providers/attendance_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +40,7 @@ class KidsChurchApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => getIt<CheckoutProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<ServicesProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<DashboardProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<AttendanceProvider>()),
         Provider(create: (_) => getIt<PrinterService>()),
         Provider(create: (_) => getIt<HardwareScannerService>()),
       ],

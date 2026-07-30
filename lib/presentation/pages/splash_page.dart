@@ -16,7 +16,10 @@ class _SplashPageState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    _initializeApp();
+    // AuthProvider.initialize() calls notifyListeners() synchronously
+    // before its first await, which throws if fired during the initial
+    // build — defer to the next frame, same fix as the other providers.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initializeApp());
   }
 
   Future<void> _initializeApp() async {

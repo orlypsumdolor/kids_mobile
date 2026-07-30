@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/app_shell_header.dart';
+import '../../providers/attendance_provider.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/services/printer_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../domain/entities/attendance_record_entry.dart';
 
 class AttendanceSummaryPage extends StatefulWidget {
   const AttendanceSummaryPage({super.key});
@@ -15,57 +18,20 @@ class AttendanceSummaryPage extends StatefulWidget {
 
 class _AttendanceSummaryPageState extends State<AttendanceSummaryPage> {
   DateTime selectedDate = DateTime.now();
-  List<Map<String, dynamic>> attendanceData = [];
-  bool isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadAttendanceData();
-  }
-
-  Future<void> _loadAttendanceData() async {
-    setState(() {
-      isLoading = true;
-    });
-
-    // Mock data - in real app, this would come from API
-    await Future.delayed(const Duration(seconds: 1));
-
-    setState(() {
-      attendanceData = [
-        {
-          'childName': 'Emma Johnson',
-          'guardianName': 'Sarah Johnson',
-          'checkinTime': '9:15 AM',
-          'checkoutTime': '11:30 AM',
-          'service': 'Sunday Morning',
-          'status': 'Completed',
-        },
-        {
-          'childName': 'Liam Smith',
-          'guardianName': 'Mike Smith',
-          'checkinTime': '9:20 AM',
-          'checkoutTime': null,
-          'service': 'Sunday Morning',
-          'status': 'Checked In',
-        },
-        {
-          'childName': 'Olivia Brown',
-          'guardianName': 'Lisa Brown',
-          'checkinTime': '9:25 AM',
-          'checkoutTime': '11:45 AM',
-          'service': 'Sunday Morning',
-          'status': 'Completed',
-        },
-      ];
-      isLoading = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AttendanceProvider>().loadAttendance(selectedDate);
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final printerConnected = context.watch<PrinterService>().isConnected;
+    final attendanceProvider = context.watch<AttendanceProvider>();
+    final summary = attendanceProvider.summary;
 
     return Scaffold(
       backgroundColor: AppTheme.pageBackground,
@@ -103,7 +69,7 @@ class _AttendanceSummaryPageState extends State<AttendanceSummaryPage> {
                         Expanded(
                           child: _StatCard(
                             title: 'Total Check-ins',
-                            value: '${attendanceData.length}',
+                            value: '${summary.totalSessions}',
                             color: AppTheme.navy,
                           ),
                         ),
@@ -111,8 +77,7 @@ class _AttendanceSummaryPageState extends State<AttendanceSummaryPage> {
                         Expanded(
                           child: _StatCard(
                             title: 'Still Here',
-                            value:
-                                '${attendanceData.where((a) => a['status'] == 'Checked In').length}',
+                            value: '${summary.activeSessions}',
                             color: AppTheme.green,
                           ),
                         ),
@@ -120,25 +85,26 @@ class _AttendanceSummaryPageState extends State<AttendanceSummaryPage> {
                         Expanded(
                           child: _StatCard(
                             title: 'Completed',
-                            value:
-                                '${attendanceData.where((a) => a['status'] == 'Completed').length}',
+                            value: '${summary.completedSessions}',
                             color: AppTheme.textTertiary,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: _SampleDataBanner(),
-                  ),
-                  const SizedBox(height: 12),
+                  if (attendanceProvider.error != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _ErrorBanner(message: attendanceProvider.error!),
+                    ),
+                  const SizedBox(height: 4),
 
                   // Attendance List
                   Expanded(
-                    child: isLoading
-                        ? const Center(child: CircularProgressIndicator(color: AppTheme.navy))
-                        : attendanceData.isEmpty
+                    child: attendanceProvider.isLoading
+                        ? const Center(
+                            child: CircularProgressIndicator(color: AppTheme.navy))
+                        : summary.records.isEmpty
                             ? Center(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -174,11 +140,12 @@ class _AttendanceSummaryPageState extends State<AttendanceSummaryPage> {
                                 clipBehavior: Clip.antiAlias,
                                 child: ListView.separated(
                                   padding: EdgeInsets.zero,
-                                  itemCount: attendanceData.length,
+                                  itemCount: summary.records.length,
                                   separatorBuilder: (_, __) =>
                                       const Divider(height: 1, color: AppTheme.hairline),
                                   itemBuilder: (context, index) {
-                                    return _AttendanceRow(record: attendanceData[index], index: index);
+                                    return _AttendanceRow(
+                                        record: summary.records[index], index: index);
                                   },
                                 ),
                               ),
@@ -200,11 +167,11 @@ class _AttendanceSummaryPageState extends State<AttendanceSummaryPage> {
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now(),
     );
-    if (picked != null && picked != selectedDate) {
+    if (picked != null && picked != selectedDate && mounted) {
       setState(() {
         selectedDate = picked;
       });
-      _loadAttendanceData();
+      context.read<AttendanceProvider>().loadAttendance(selectedDate);
     }
   }
 
@@ -224,45 +191,23 @@ class _AttendanceSummaryPageState extends State<AttendanceSummaryPage> {
   }
 }
 
-class _SampleDataBanner extends StatelessWidget {
-  const _SampleDataBanner();
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+
+  const _ErrorBanner({required this.message});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.warningBg,
+        color: AppTheme.errorBg,
         borderRadius: BorderRadius.circular(AppTheme.radiusButton),
-        border: Border.all(color: AppTheme.warningBorder, width: 1.5),
+        border: Border.all(color: AppTheme.errorBorder, width: 1.5),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF6E3B8),
-              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-            ),
-            child: const Text(
-              'GAP §8.1',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.4,
-                color: AppTheme.warningText,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              "Designed against live data. Today this screen renders sample data — the reporting endpoints exist but aren't wired.",
-              style: TextStyle(fontSize: 12.5, color: Color(0xFF6B5220), height: 1.4),
-            ),
-          ),
-        ],
+      child: Text(
+        'Could not load attendance: $message',
+        style: const TextStyle(fontSize: 12.5, color: AppTheme.error),
       ),
     );
   }
@@ -316,15 +261,18 @@ class _StatCard extends StatelessWidget {
 }
 
 class _AttendanceRow extends StatelessWidget {
-  final Map<String, dynamic> record;
+  final AttendanceRecordEntry record;
   final int index;
 
   const _AttendanceRow({required this.record, required this.index});
 
   @override
   Widget build(BuildContext context) {
-    final isCheckedIn = record['status'] == 'Checked In';
     const barColors = [AppTheme.green, AppTheme.blue, AppTheme.yellow, AppTheme.magenta];
+    final checkInLabel = DateFormat('h:mm a').format(record.checkInTime.toLocal());
+    final checkOutLabel = record.checkOutTime != null
+        ? DateFormat('h:mm a').format(record.checkOutTime!.toLocal())
+        : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -345,13 +293,13 @@ class _AttendanceRow extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  record['childName'],
+                  record.childName,
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  '${record['guardianName']} · In ${record['checkinTime']}'
-                  '${record['checkoutTime'] != null ? ' · Out ${record['checkoutTime']}' : ''}',
+                  '${record.guardianName} · In $checkInLabel'
+                  '${checkOutLabel != null ? ' · Out $checkOutLabel' : ''}',
                   style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -361,15 +309,15 @@ class _AttendanceRow extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: isCheckedIn ? const Color(0xFFE6F5EA) : AppTheme.chipNeutralBg,
+              color: record.isCheckedIn ? const Color(0xFFE6F5EA) : AppTheme.chipNeutralBg,
               borderRadius: BorderRadius.circular(AppTheme.radiusPill),
             ),
             child: Text(
-              isCheckedIn ? 'Here' : 'Out',
+              record.isCheckedIn ? 'Here' : 'Out',
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
-                color: isCheckedIn ? const Color(0xFF1F6E39) : AppTheme.textTertiary,
+                color: record.isCheckedIn ? const Color(0xFF1F6E39) : AppTheme.textTertiary,
               ),
             ),
           ),
